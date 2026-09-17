@@ -4,7 +4,7 @@ import "./globals.css"
 export const metadata: Metadata = {
   title: "e-Proc MVP",
   description: "Workspace pengadaan IT berbasis file dengan tender, dashboard, dokumen, dan export laporan.",
-  icons: { icon: "/favicon.svg", shortcut: "/favicon.svg" },
+  icons: { icon: "/favicon.ico", shortcut: "/favicon.ico" },
   other: { "codex-preview": "development" },
 }
 
