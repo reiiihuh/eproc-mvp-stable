@@ -106,3 +106,31 @@ Lihat [panduan Google Sheets dan Apps Script](docs/GOOGLE-SHEETS-APPS-SCRIPT.md)
 Folder `.openai/` di ZIP hanya berisi konfigurasi lokal tanpa `project_id`.
 Credential OAuth, secret, access token, data Google Sheets, dan access policy
 tidak disimpan di ZIP.
+
+### Deploy test ke Vercel
+
+Project ini memakai Vinext dengan output server Nitro, jadi preset Vercel-nya
+bukan static Vite biasa.
+
+1. Import repository ke Vercel dan biarkan `vercel.json` menjadi konfigurasi build.
+2. Pilih Node.js `22.x`.
+3. Tambahkan environment variable `APPS_SCRIPT_URL`,
+   `NEXT_PUBLIC_APPS_SCRIPT_URL`, dan `NEXT_PUBLIC_GOOGLE_CLIENT_ID` untuk
+   Production, Preview, dan Development.
+4. Deploy. Build command yang dipakai adalah `npm run build:vercel` dan output
+   Build Output API berada di `.vercel/output`.
+5. Tambahkan origin deployment Vercel secara persis, misalnya
+   `https://nama-project.vercel.app`, ke Google OAuth **Authorized JavaScript origins**.
+
+Jangan menambahkan trailing slash pada OAuth origin. Untuk custom domain, tambahkan
+origin custom domain tersebut juga.
+
+### Dataset tahunan
+
+Menu Pengaturan dapat membuat dataset tahunan kosong, memilih dataset untuk
+dibaca, mengaktifkannya untuk request portal baru, mengarsipkan dataset nonaktif,
+serta mengaktifkan kembali dataset arsip. Reset berlaku untuk dataset non-legacy
+yang sedang tidak aktif, meminta konfirmasi `RESET DATASET_KEY`, dan membuat
+ketiga sheet backup sebelum data transaksi dikosongkan. Setelah reset, status
+kembali menjadi `READY / SANDBOX`. Jika sheet
+`CONFIG DATASET` belum ada, backend otomatis memakai master lama tanpa migrasi.

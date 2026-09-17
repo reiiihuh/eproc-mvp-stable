@@ -22,7 +22,7 @@ export class AppsScriptWorkspaceAdapter {
 
   async upsertProcurement(record: ProcurementRecord) {
     const result = await this.repository.upsertProcurementRecord(record)
-    return { ...record, sourceRow: result.sourceRow }
+    return { ...record, requestId: result.requestId || record.requestId, sourceRow: result.sourceRow }
   }
 
   async deleteProcurement(record: ProcurementRecord) {

@@ -1,7 +1,7 @@
 import type { ProcurementSession, PortalReviewDetail, PortalReviewRequest } from "./portal-review-types"
-import type { ProcurementPic, ProcurementRecord, ProcurementVendor } from "./procurement-types"
+import type { ProcurementDataset, ProcurementPic, ProcurementRecord, ProcurementVendor } from "./procurement-types"
 
-export type ProcurementWorkspaceSnapshot = { title: string; sheets: Record<string, unknown[][]> }
+export type ProcurementWorkspaceSnapshot = { title: string; sheets: Record<string, unknown[][]>; dataset?: ProcurementDataset }
 
 export interface PortalReviewRepository {
   getSession(): Promise<ProcurementSession>
@@ -17,7 +17,13 @@ export interface PortalReviewRepository {
   syncProcurementStatus(masterRequestId: string, status: string, poNumber: string, poUrl: string): Promise<void>
   flushPendingStatusSyncs(): Promise<void>
   getProcurementWorkspace(): Promise<ProcurementWorkspaceSnapshot>
-  upsertProcurementRecord(record: ProcurementRecord): Promise<{ sourceRow: number }>
+  listProcurementDatasets(): Promise<ProcurementDataset[]>
+  setProcurementDataset(datasetKey: string): void
+  prepareProcurementDataset(year: number): Promise<ProcurementDataset[]>
+  activateProcurementDataset(datasetKey: string): Promise<ProcurementDataset[]>
+  archiveProcurementDataset(datasetKey: string): Promise<ProcurementDataset[]>
+  resetProcurementSandbox(datasetKey: string, confirmation: string): Promise<ProcurementDataset[]>
+  upsertProcurementRecord(record: ProcurementRecord): Promise<{ sourceRow: number; requestId?: string }>
   deleteProcurementRecords(records: ProcurementRecord[]): Promise<void>
   upsertProcurementPic(pic: ProcurementPic): Promise<{ id: string; sourceRow: number }>
   deleteProcurementPics(pics: ProcurementPic[]): Promise<void>
@@ -33,10 +39,11 @@ export class AppsScriptPortalReviewRepository implements PortalReviewRepository 
   private workspaceCache?: { at: number; data: ProcurementWorkspaceSnapshot }
   private workspacePromise?: Promise<ProcurementWorkspaceSnapshot>
   private sessionPromise?: Promise<ProcurementSession>
+  private datasetKey = ""
   constructor(private readonly endpoint: string, private readonly idToken: string) {}
 
   private async call<T>(action: string, payload: Record<string, unknown> = {}) {
-    const retryable = ["getProcurementSession", "listReviewQueue", "getProcurementRequestDetail", "getProcurementWorkspace", "syncProcurementStatus"].includes(action)
+    const retryable = ["getProcurementSession", "listReviewQueue", "getProcurementRequestDetail", "getProcurementWorkspace", "listProcurementDatasets", "syncProcurementStatus"].includes(action)
     let lastError: unknown
     for (let attempt = 0; attempt < (retryable ? 2 : 1); attempt++) {
       const controller = new AbortController()
@@ -100,17 +107,28 @@ export class AppsScriptPortalReviewRepository implements PortalReviewRepository 
   rejectRequest(requestId: string, note: string) { return this.write<PortalReviewDetail>("procurement.reject", { requestId, note }) }
   submitReview(requestId: string, decision: "REVISION" | "APPROVE" | "REJECT", note: string, reviews: { documentId: string; status: "VALID" | "REVISION_REQUIRED"; note: string }[]) { return this.write<PortalReviewDetail>("procurement.submitReview", { requestId, decision, note, reviews }) }
   promoteToProcurement(requestId: string) { return this.write<PortalReviewDetail>("procurement.promote", { requestId }) }
+  setProcurementDataset(datasetKey: string) {
+    if (this.datasetKey === datasetKey) return
+    this.datasetKey = datasetKey
+    this.workspaceCache = undefined
+    this.workspacePromise = undefined
+  }
+  listProcurementDatasets() { return this.call<ProcurementDataset[]>("listProcurementDatasets") }
+  prepareProcurementDataset(year: number) { return this.write<ProcurementDataset[]>("procurement.prepareDataset", { year }) }
+  activateProcurementDataset(datasetKey: string) { return this.write<ProcurementDataset[]>("procurement.activateDataset", { datasetKey }) }
+  archiveProcurementDataset(datasetKey: string) { return this.write<ProcurementDataset[]>("procurement.archiveDataset", { datasetKey }) }
+  resetProcurementSandbox(datasetKey: string, confirmation: string) { return this.write<ProcurementDataset[]>("procurement.resetSandboxDataset", { datasetKey, confirmation }) }
   getProcurementWorkspace() {
     if (this.workspaceCache && Date.now() - this.workspaceCache.at < 15_000) return Promise.resolve(this.workspaceCache.data)
-    this.workspacePromise ??= this.call<ProcurementWorkspaceSnapshot>("getProcurementWorkspace").then((data) => {
+    this.workspacePromise ??= this.call<ProcurementWorkspaceSnapshot>("getProcurementWorkspace", { datasetKey: this.datasetKey }).then((data) => {
       this.workspaceCache = { at: Date.now(), data }
       return data
     }).finally(() => { this.workspacePromise = undefined })
     return this.workspacePromise
   }
-  upsertProcurementRecord(record: ProcurementRecord) { return this.write<{ sourceRow: number }>("procurement.upsertRecord", { record }) }
+  upsertProcurementRecord(record: ProcurementRecord) { return this.write<{ sourceRow: number; requestId?: string }>("procurement.upsertRecord", { record, datasetKey: this.datasetKey }) }
   async deleteProcurementRecords(records: ProcurementRecord[]) {
-    await this.write<Record<string, unknown>>("procurement.deleteRecords", { records: records.map((record) => ({ sourceRow: record.sourceRow, requestId: record.requestId, originalRequestId: record.originalRequestId })) })
+    await this.write<Record<string, unknown>>("procurement.deleteRecords", { datasetKey: this.datasetKey, records: records.map((record) => ({ sourceRow: record.sourceRow, requestId: record.requestId, originalRequestId: record.originalRequestId })) })
   }
   upsertProcurementPic(pic: ProcurementPic) { return this.write<{ id: string; sourceRow: number }>("procurement.upsertPic", { pic }) }
   async deleteProcurementPics(pics: ProcurementPic[]) {

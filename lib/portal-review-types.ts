@@ -15,6 +15,8 @@ export type PortalReviewRequest = {
   requesterName: string
   requesterEmail: string
   requesterDivision: string
+  requesterPosition: string
+  requesterLocation: string
   requesterNotes: string
   status: string
   submittedAt: string

@@ -5,6 +5,7 @@ const READ_ACTIONS = new Set([
   "listReviewQueue",
   "getProcurementRequestDetail",
   "getProcurementWorkspace",
+  "listProcurementDatasets",
   "syncProcurementStatus",
 ])
 

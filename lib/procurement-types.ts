@@ -66,6 +66,21 @@ export type ProcurementVendor = {
 export type ProcurementCurrency = "IDR" | "USD" | "SGD"
 export type ProcurementBudgetType = "CAPEX" | "OPEX" | "BANK WIDE"
 
+/** Dataset transaksi per tahun. Master requester dan vendor tetap dipakai bersama. */
+export type ProcurementDataset = {
+  key: string
+  year: number
+  label: string
+  masterSheet: string
+  offersSheet: string
+  documentsSheet: string
+  status: "ACTIVE" | "READY" | "ARCHIVED"
+  environment: "LEGACY" | "SANDBOX" | "PRODUCTION"
+  active: boolean
+  lastSequence: number
+  legacy?: boolean
+}
+
 export type ScoringScheme = "normalized" | "weighted" | "custom"
 
 export type ScoringVendor = {

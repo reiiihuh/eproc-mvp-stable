@@ -1,39 +1,12 @@
 import vinext from "vinext";
+import { resolve } from "node:path";
 import { defineConfig, loadEnv } from "vite";
-import hostingConfig from "./.openai/hosting.json";
-import { sites } from "./build/sites-vite-plugin";
-
-const SITE_CREATOR_PLACEHOLDER_DATABASE_ID =
-  "00000000-0000-4000-8000-000000000000";
-
-const { d1, r2 } = hostingConfig;
 
 // macOS Seatbelt blocks FSEvents, so Codex previews need polling for HMR.
 const isCodexSeatbeltSandbox = process.env.CODEX_SANDBOX === "seatbelt";
 
-const localBindingConfig = {
-  main: "./worker/index.ts",
-  compatibility_flags: ["nodejs_compat"],
-  d1_databases: d1
-    ? [
-        {
-          binding: d1,
-          database_name: "site-creator-d1",
-          database_id: SITE_CREATOR_PLACEHOLDER_DATABASE_ID,
-        },
-      ]
-    : [],
-  r2_buckets: r2
-    ? [
-        {
-          binding: r2,
-          bucket_name: "site-creator-r2",
-        },
-      ]
-    : [],
-};
-
 export default defineConfig(async ({ mode }) => {
+  const isVercelBuild = mode === "vercel" || Boolean(process.env.VERCEL);
   // Vinext tidak selalu menginjeksi NEXT_PUBLIC_* seperti Next.js native.
   // Muat eksplisit hanya konfigurasi public yang memang dibutuhkan browser.
   const publicEnv = loadEnv(mode, process.cwd(), "NEXT_PUBLIC_");
@@ -45,10 +18,19 @@ export default defineConfig(async ({ mode }) => {
   process.env.WRANGLER_LOG_PATH ??= ".wrangler/logs";
   process.env.MINIFLARE_REGISTRY_PATH ??= ".wrangler/registry";
 
-  // Wrangler snapshots its log path while the Cloudflare plugin is imported.
-  const { cloudflare } = await import("@cloudflare/vite-plugin");
+  // Vercel memakai output Nitro; preview Sites/Cloudflare tetap memakai plugin lama.
+  const deploymentPlugins = isVercelBuild
+    ? (await import("nitro/vite")).nitro({ preset: "vercel" })
+    : [(await import("./build/sites-vite-plugin")).sites()];
 
   return {
+    resolve: isVercelBuild ? {
+      // Nitro membangun beberapa Vite environment; alias absolut menjaga import CSS paket tetap konsisten.
+      alias: {
+        tailwindcss: resolve(process.cwd(), "node_modules/tailwindcss/index.css"),
+        "tw-animate-css": resolve(process.cwd(), "node_modules/tw-animate-css/dist/tw-animate.css"),
+      },
+    } : undefined,
     define: {
       "process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID": JSON.stringify(googleClientId),
       "process.env.NEXT_PUBLIC_APPS_SCRIPT_URL": JSON.stringify(appsScriptUrl),
@@ -62,7 +44,7 @@ export default defineConfig(async ({ mode }) => {
     },
     plugins: [
       vinext(),
-      sites(),
+      ...deploymentPlugins,
     ],
   };
 });

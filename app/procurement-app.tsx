@@ -29,12 +29,13 @@ import { AppsScriptWorkspaceAdapter } from "@/lib/apps-script-workspace"
 import { downloadBlob } from "@/lib/browser-download"
 import { requestDriveToken } from "@/lib/google-drive"
 import { defaultSettings, formatRequestId, XlsxWorkspaceAdapter } from "@/lib/procurement-data"
-import type { ProcurementPic, ProcurementRecord, ProcurementVendor, ProcurementWorkspace, TenderOffer } from "@/lib/procurement-types"
+import type { ProcurementDataset, ProcurementPic, ProcurementRecord, ProcurementVendor, ProcurementWorkspace, TenderOffer } from "@/lib/procurement-types"
 import { STATUS_ORDER } from "@/lib/procurement-types"
 
 type MasterSortKey = "requestId" | "originalRequestId" | "description" | "status" | "requestDate" | "picName" | "selectedVendor" | "poNumber" | "poDate" | "poAmountIncl" | "efficiency" | "budget"
 const currentYear = new Date().getFullYear()
 const compact = new Intl.NumberFormat("id-ID", { notation: "compact", maximumFractionDigits: 1 })
+const legacyDatasetFallback: ProcurementDataset = { key: "LEGACY", year: currentYear, label: "Master lama", masterSheet: "MASTER DATABASE PENGADAAN", offersSheet: "PENAWARAN VENDOR", documentsSheet: "DOKUMEN PENGADAAN", status: "ACTIVE", environment: "LEGACY", active: true, lastSequence: 0, legacy: true }
 
 const demoRecords: ProcurementRecord[] = [
   { recordUid: "demo-001", requestId: "PROC-2026-0001", originalRequestId: "RFP/IT/001", requestDate: "2026-01-08", status: "Complete", picName: "Danny Adi Saputra", division: "IT Strategy & GRC", position: "Department Head", email: "danny@example.com", location: "Head Office", requestType: "Project", itemName: "Managed Security Monitoring", description: "Layanan monitoring keamanan 24x7.", quantity: 1, category: "Subscription", requestKind: "Renewal", procurementMethod: "Tender", budget: 700000000, budgetCode: "IT-SEC-2026", selectedVendor: "Vendor Beta", poNumber: "PO-IT-2026-0001", poDate: "2026-02-14", memoDate: "2026-01-10", directorApprovalDate: "2026-01-14", fpcSentDate: "2026-01-20", fpcApprovalDate: "2026-01-24", poAmountExcl: 623500000, poAmountIncl: 692085000, efficiency: 16500000, currency: "IDR", offers: [], documents: [] },
@@ -86,6 +87,8 @@ export default function ProcurementApp({ auth }: { auth: AuthenticatedProcuremen
   const [sheetConnection, setSheetConnection] = useState<SheetConnection>(null)
   const [operation, setOperation] = useState<OperationState>({ open: false, title: "", message: "", step: 0, total: 1, state: "working" })
   const [reviewCount, setReviewCount] = useState(0)
+  const [datasets, setDatasets] = useState<ProcurementDataset[]>([])
+  const [selectedDatasetKey, setSelectedDatasetKey] = useState("")
   const fileInput = useRef<HTMLInputElement>(null)
   const autoWorkspaceAttempted = useRef(false)
   const backendWorkspace = useMemo(() => new AppsScriptWorkspaceAdapter(auth.repository), [auth.repository])
@@ -105,11 +108,18 @@ export default function ProcurementApp({ auth }: { auth: AuthenticatedProcuremen
   useEffect(() => {
     if (autoWorkspaceAttempted.current) return
     autoWorkspaceAttempted.current = true
-    void backendWorkspace.loadWorkspace(workspace.settings, workspace.scorecards).then((loaded) => {
+    // Deployment backend lama tetap dapat membuka dashboard selama versi baru belum dipublikasikan.
+    void auth.repository.listProcurementDatasets().catch(() => [legacyDatasetFallback]).then(async (available) => {
+      const preferred = available.find((item) => item.active) || available[0]
+      if (!preferred) throw new Error("Dataset pengadaan tidak tersedia.")
+      setDatasets(available); setSelectedDatasetKey(preferred.key)
+      auth.repository.setProcurementDataset(preferred.key)
+      const loaded = await backendWorkspace.loadWorkspace(workspace.settings, workspace.scorecards)
       setWorkspace((current) => ({ ...loaded, settings: current.settings }))
-      setSheetConnection({ spreadsheetId: "apps-script", title: loaded.sourceName, lastSyncedAt: new Date().toISOString() })
+      setYear(preferred.year || currentYear)
+      setSheetConnection({ spreadsheetId: "apps-script", title: `${loaded.sourceName} · ${preferred.label}`, lastSyncedAt: new Date().toISOString() })
     }).catch((error) => toast.error(error instanceof Error ? `Master pengadaan gagal dimuat: ${error.message}` : "Master pengadaan gagal dimuat."))
-  }, [backendWorkspace, workspace.scorecards, workspace.settings])
+  }, [auth.repository, backendWorkspace, workspace.scorecards, workspace.settings])
   useEffect(() => {
     if (!sheetConnection) return
     const seconds = workspace.settings.autoRefreshSeconds ?? 30
@@ -128,6 +138,41 @@ export default function ProcurementApp({ auth }: { auth: AuthenticatedProcuremen
     setSheetConnection((current) => current ? { ...current, lastSyncedAt: new Date().toISOString() } : current)
   }
 
+  async function selectDataset(datasetKey: string) {
+    const target = datasets.find((item) => item.key === datasetKey)
+    if (!target) return
+    showOperation("Membuka dataset", `Memuat ${target.label}`, 2)
+    try {
+      auth.repository.setProcurementDataset(datasetKey)
+      setSelectedDatasetKey(datasetKey)
+      const latest = await backendWorkspace.loadWorkspace(workspace.settings, workspace.scorecards)
+      setWorkspace((current) => ({ ...latest, settings: current.settings }))
+      setYear(target.year || currentYear); setSelectedRecords([]); setMasterPage(1)
+      setSheetConnection({ spreadsheetId: "apps-script", title: `${latest.sourceName} · ${target.label}`, lastSyncedAt: new Date().toISOString() })
+      finishOperation(`${target.label} siap digunakan`)
+    } catch (error) { failOperation(error instanceof Error ? error.message : "Dataset gagal dimuat.") }
+  }
+  async function prepareDataset(datasetYear: number) {
+    showOperation("Menyiapkan dataset", `Membuat sandbox ${datasetYear}`, 3)
+    try { const items = await auth.repository.prepareProcurementDataset(datasetYear); setDatasets(items); finishOperation(`Sandbox ${datasetYear} berhasil dibuat`) }
+    catch (error) { failOperation(error instanceof Error ? error.message : "Dataset gagal dibuat.") }
+  }
+  async function activateDataset(datasetKey: string) {
+    showOperation("Mengaktifkan dataset", "Memperbarui dataset aktif portal", 3)
+    try { const items = await auth.repository.activateProcurementDataset(datasetKey); setDatasets(items); await selectDataset(datasetKey); toast.success("Dataset aktif berhasil diperbarui.") }
+    catch (error) { failOperation(error instanceof Error ? error.message : "Dataset gagal diaktifkan.") }
+  }
+  async function archiveDataset(datasetKey: string) {
+    showOperation("Mengarsipkan dataset", "Memperbarui registry dataset", 2)
+    try { const items = await auth.repository.archiveProcurementDataset(datasetKey); setDatasets(items); finishOperation("Dataset berhasil diarsipkan") }
+    catch (error) { failOperation(error instanceof Error ? error.message : "Dataset gagal diarsipkan.") }
+  }
+  async function resetSandbox(datasetKey: string, confirmation: string) {
+    showOperation("Reset sandbox", "Membuat backup sebelum mengosongkan data", 4)
+    try { const items = await auth.repository.resetProcurementSandbox(datasetKey, confirmation); setDatasets(items); if (datasetKey === selectedDatasetKey) await selectDataset(datasetKey); finishOperation("Sandbox sudah di-backup dan direset") }
+    catch (error) { failOperation(error instanceof Error ? error.message : "Sandbox gagal direset.") }
+  }
+
   async function googleToken() {
     if (driveToken) return driveToken
     const clientId = workspace.settings.driveClientId || auth.googleClientId
@@ -137,7 +182,7 @@ export default function ProcurementApp({ auth }: { auth: AuthenticatedProcuremen
     return token
   }
 
-  const years = useMemo(() => { const values = new Set(workspace.records.map((record) => Number(record.requestDate.slice(0, 4))).filter(Boolean)); values.add(currentYear); return [...values].sort((a, b) => b - a) }, [workspace.records])
+  const years = useMemo(() => { const values = new Set(workspace.records.map((record) => Number(record.requestDate.slice(0, 4))).filter(Boolean)); values.add(datasets.find((item) => item.key === selectedDatasetKey)?.year || currentYear); return [...values].sort((a, b) => b - a) }, [datasets, selectedDatasetKey, workspace.records])
   const requestYearRecords = useMemo(() => workspace.records.filter((record) => Number(record.requestDate.slice(0, 4)) === year), [workspace.records, year])
   const statusData = STATUS_ORDER.map((status) => ({ status, value: requestYearRecords.filter((record) => record.status === status).length }))
   const monthlyData = Array.from({ length: 12 }, (_, index) => ({ month: new Intl.DateTimeFormat("id-ID", { month: "short" }).format(new Date(2026, index, 1)), total: requestYearRecords.filter((record) => Number(record.requestDate.slice(5, 7)) === index + 1).length }))
@@ -224,8 +269,8 @@ export default function ProcurementApp({ auth }: { auth: AuthenticatedProcuremen
         {view === "vendors" && <VendorMasterView vendors={workspace.vendors} onSave={saveVendor} onDelete={deleteVendor} onDeleteMany={deleteVendors} />}
         {view === "vendor_management" && <VendorManagement vendors={workspace.vendors} records={workspace.records} />}
         {view === "tender" && <TenderScoring scorecards={workspace.scorecards} onChange={(scorecards) => setWorkspace((current) => ({ ...current, scorecards }))} />}
-        {view === "documents" && <DriveBrowser token={driveToken} connectDrive={() => { void googleToken().then(() => toast.success("Google Drive terhubung.")).catch((error) => toast.error(error instanceof Error ? error.message : "Google Drive gagal dihubungkan.")) }} />}
-        {view === "settings" && <><input ref={fileInput} type="file" accept=".xlsx,.xls" className="hidden" onChange={(event) => importFile(event.target.files?.[0])} /><ProcurementSettings workspace={workspace} setWorkspace={setWorkspace} sheetConnection={sheetConnection} pageSize={masterPageSize} setPageSize={(size) => { setMasterPageSize(size); setMasterPage(1) }} exportXlsx={() => { downloadBlob(new XlsxWorkspaceAdapter().export(workspace), `Master_Pengadaan_${new Date().toISOString().slice(0, 10)}.xlsx`); toast.success("Master spreadsheet berhasil dibuat.") }} exportJson={() => downloadBlob(new Blob([JSON.stringify(workspace, null, 2)], { type: "application/json" }), `Procurement_Workspace_${new Date().toISOString().slice(0, 10)}.json`)} openReport={() => setReportOpen(true)} importXlsx={() => fileInput.current?.click()} /></>}
+        {view === "documents" && <DriveBrowser token={driveToken} connectDrive={async () => { await googleToken().then(() => toast.success("Google Drive terhubung.")).catch((error) => toast.error(error instanceof Error ? error.message : "Google Drive gagal dihubungkan.")) }} />}
+        {view === "settings" && <><input ref={fileInput} type="file" accept=".xlsx,.xls" className="hidden" onChange={(event) => importFile(event.target.files?.[0])} /><ProcurementSettings workspace={workspace} setWorkspace={setWorkspace} sheetConnection={sheetConnection} pageSize={masterPageSize} setPageSize={(size) => { setMasterPageSize(size); setMasterPage(1) }} exportXlsx={() => { downloadBlob(new XlsxWorkspaceAdapter().export(workspace), `Master_Pengadaan_${new Date().toISOString().slice(0, 10)}.xlsx`); toast.success("Master spreadsheet berhasil dibuat.") }} exportJson={() => downloadBlob(new Blob([JSON.stringify(workspace, null, 2)], { type: "application/json" }), `Procurement_Workspace_${new Date().toISOString().slice(0, 10)}.json`)} openReport={() => setReportOpen(true)} importXlsx={() => fileInput.current?.click()} datasets={datasets} selectedDatasetKey={selectedDatasetKey} onSelectDataset={selectDataset} onPrepareDataset={prepareDataset} onActivateDataset={activateDataset} onArchiveDataset={archiveDataset} onResetSandbox={resetSandbox} /></>}
       </main>
     </SidebarInset>
     <AddProcurementDialog open={dialogOpen} setOpen={setDialogOpen} draft={draft} pics={workspace.pics} vendors={workspace.vendors} categories={categories} updateDraft={updateDraft} selectPic={selectPic} changeOffer={changeOffer} save={saveDraft} emptyOffer={emptyOffer} mode={editMode} />
