@@ -1,0 +1,73 @@
+"use client"
+
+import { useEffect, useMemo, useState } from "react"
+import { Bell, CalendarDays, CheckCircle2, Clock3, Moon, Pin, Sun } from "lucide-react"
+
+import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import type { ProcurementRecord, ProcurementStatus } from "@/lib/procurement-types"
+
+const entryDate = (value: string) => new Date(`${value}T12:00:00`)
+type NotificationSort = "priority" | "oldest" | "newest" | "name"
+
+export function NotificationCenter({ records, onOpenRecord }: { records: ProcurementRecord[]; onOpenRecord: (record: ProcurementRecord) => void }) {
+  // Pins are personal UI preferences, so localStorage is appropriate here.
+  // Procurement records themselves remain in the selected data adapter.
+  const [now, setNow] = useState(() => new Date())
+  const [sort, setSort] = useState<NotificationSort>("priority")
+  const [pinned, setPinned] = useState<string[]>(() => {
+    if (typeof window === "undefined") return []
+    try { return JSON.parse(window.localStorage.getItem("procurement-sheets-lab.pinned") || "[]") as string[] } catch { return [] }
+  })
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(new Date()), 60_000)
+    return () => window.clearInterval(timer)
+  }, [])
+  useEffect(() => { window.localStorage.setItem("procurement-sheets-lab.pinned", JSON.stringify(pinned)) }, [pinned])
+
+  const entries = useMemo(() => records.filter((record) => ["Upcoming", "Ongoing"].includes(record.status)).sort((a, b) => {
+    if (sort === "priority") {
+      const pinResult = Number(pinned.includes(b.recordUid)) - Number(pinned.includes(a.recordUid))
+      if (pinResult) return pinResult
+    }
+    if (sort === "name") return (a.description || a.itemName).localeCompare(b.description || b.itemName, "id")
+    const dateResult = (a.requestDate || "9999-12-31").localeCompare(b.requestDate || "9999-12-31")
+    return sort === "newest" ? -dateResult : dateResult
+  }), [pinned, records, sort])
+
+  const jakartaHour = Number(new Intl.DateTimeFormat("en-GB", { hour: "2-digit", hour12: false, timeZone: "Asia/Jakarta" }).format(now))
+  const period = jakartaHour < 6 ? "Malam" : jakartaHour < 11 ? "Pagi" : jakartaHour < 15 ? "Siang" : jakartaHour < 18 ? "Sore" : "Malam"
+  const PeriodIcon = jakartaHour >= 6 && jakartaHour < 18 ? Sun : Moon
+  const togglePin = (id: string) => setPinned((current) => current.includes(id) ? current.filter((value) => value !== id) : [...current, id])
+
+  const section = (status: Extract<ProcurementStatus, "Ongoing" | "Upcoming">) => {
+    const rows = entries.filter((record) => record.status === status)
+    return <section className="rounded-xl border border-slate-100 bg-slate-50/60 p-2">
+      <div className="flex items-center justify-between px-2 py-1.5"><h3 className="text-xs font-bold uppercase tracking-[.12em] text-slate-500">{status}</h3><Badge variant="secondary">{rows.length}</Badge></div>
+      {rows.length ? rows.map((record) => {
+        const isPinned = pinned.includes(record.recordUid)
+        return <div key={record.recordUid} className="group flex items-start gap-1 rounded-xl bg-white p-2 shadow-sm ring-1 ring-slate-100 transition hover:ring-blue-100">
+          <button type="button" onClick={() => onOpenRecord(record)} className="flex min-w-0 flex-1 gap-3 rounded-lg p-1 text-left">
+            <div className={`mt-0.5 grid size-9 shrink-0 place-items-center rounded-lg ${status === "Ongoing" ? "bg-amber-50 text-amber-600" : "bg-sky-50 text-sky-600"}`}><CalendarDays className="size-4" /></div>
+            <div className="min-w-0 flex-1"><p className="truncate text-sm font-semibold text-slate-800">{record.description || record.itemName}</p><p className="mt-1 truncate text-xs text-slate-500">{record.picName || "Tanpa PIC"}</p>{record.requestDate && <p className="mt-1 text-xs font-medium text-[#2075b8]">{new Intl.DateTimeFormat("id-ID", { day: "numeric", month: "short", year: "numeric" }).format(entryDate(record.requestDate))}</p>}</div>
+          </button>
+          <Button type="button" variant="ghost" size="icon-sm" aria-label={isPinned ? "Lepas pin urgent" : "Pin sebagai urgent"} title={isPinned ? "Lepas pin" : "Pin urgent"} onClick={() => togglePin(record.recordUid)} className={isPinned ? "text-rose-600" : "text-slate-300 group-hover:text-slate-500"}><Pin className={isPinned ? "fill-current" : ""} /></Button>
+        </div>
+      }) : <p className="px-3 py-5 text-center text-xs text-slate-400">Tidak ada {status.toLowerCase()}.</p>}
+    </section>
+  }
+
+  return <div className="flex items-center gap-2">
+    <div className="hidden items-center gap-2 lg:flex"><div className={`grid size-9 place-items-center rounded-xl ${period === "Malam" ? "bg-indigo-50 text-indigo-600" : "bg-amber-50 text-amber-600"}`} title={period}><PeriodIcon className="size-4" /></div><div className="text-right"><p className="text-sm font-semibold text-slate-800">{new Intl.DateTimeFormat("id-ID", { weekday: "short", day: "2-digit", month: "short", year: "numeric", timeZone: "Asia/Jakarta" }).format(now)}</p><p className="flex items-center justify-end gap-1 text-xs text-slate-500"><Clock3 className="size-3" />{new Intl.DateTimeFormat("id-ID", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Jakarta" }).format(now)} WIB · {period}</p></div></div>
+    <Popover>
+      <PopoverTrigger asChild><Button variant="outline" size="icon" className="relative border-slate-200 bg-white" aria-label="Notifikasi pengadaan"><Bell />{entries.length > 0 && <span className="absolute -right-1 -top-1 grid min-w-5 place-items-center rounded-full bg-rose-500 px-1 text-[11px] font-bold leading-5 text-white">{Math.min(entries.length, 99)}</span>}</Button></PopoverTrigger>
+      <PopoverContent align="end" className="w-[min(94vw,430px)] overflow-hidden p-0 shadow-xl">
+        <div className="border-b border-slate-100 px-4 py-3"><div className="flex items-center justify-between gap-3"><div><h2 className="font-display font-bold text-slate-900">Pengadaan aktif</h2><p className="mt-1 text-xs text-slate-500"></p></div><Select value={sort} onValueChange={(value) => setSort(value as NotificationSort)}><SelectTrigger className="w-32"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="priority">Urgent </SelectItem><SelectItem value="oldest">Terlama</SelectItem><SelectItem value="newest">Terbaru</SelectItem><SelectItem value="name">Nama A–Z</SelectItem></SelectContent></Select></div></div>
+        <div className="max-h-[470px] space-y-2 overflow-y-auto p-2">{entries.length ? <>{section("Ongoing")}{section("Upcoming")}</> : <div className="px-6 py-12 text-center"><CheckCircle2 className="mx-auto size-9 text-emerald-400" /><p className="mt-3 text-sm font-medium text-slate-700">Tidak ada pengadaan aktif</p></div>}</div>
+      </PopoverContent>
+    </Popover>
+  </div>
+}
