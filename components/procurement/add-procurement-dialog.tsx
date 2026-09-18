@@ -104,13 +104,13 @@ export function AddProcurementDialog({
 
         <section className="grid gap-4 border-t border-slate-200 pt-6 sm:grid-cols-2">
           <div className="sm:col-span-2"><h3 className="font-display text-base font-bold">Purchase Order & nilai</h3><p className="text-sm text-slate-500">Boleh dikosongkan untuk pengadaan Upcoming atau Ongoing.</p></div>
-          <Field label="Tanggal Memo"><Input type="date" value={draft.memoDate ?? ""} onChange={(event) => updateDraft("memoDate", event.target.value)} /></Field>
-          <Field label="Tanggal Persetujuan Direksi"><Input type="date" value={draft.directorApprovalDate ?? ""} onChange={(event) => updateDraft("directorApprovalDate", event.target.value)} /></Field>
-          <Field label="Tanggal Kirim FPC"><Input type="date" value={draft.fpcSentDate ?? ""} onChange={(event) => updateDraft("fpcSentDate", event.target.value)} /></Field>
-          <Field label="Tanggal Approval FPC"><Input type="date" value={draft.fpcApprovalDate ?? ""} onChange={(event) => updateDraft("fpcApprovalDate", event.target.value)} /></Field>
+          <Field label="Tanggal Memo"><Input type="date" min={draft.requestDate || undefined} value={draft.memoDate ?? ""} onChange={(event) => updateDraft("memoDate", event.target.value)} /></Field>
+          <Field label="Tanggal Persetujuan Direksi"><Input type="date" min={draft.memoDate || draft.requestDate || undefined} value={draft.directorApprovalDate ?? ""} onChange={(event) => updateDraft("directorApprovalDate", event.target.value)} /></Field>
+          <Field label="Tanggal Kirim FPC"><Input type="date" min={draft.directorApprovalDate || draft.memoDate || draft.requestDate || undefined} value={draft.fpcSentDate ?? ""} onChange={(event) => updateDraft("fpcSentDate", event.target.value)} /></Field>
+          <Field label="Tanggal Approval FPC"><Input type="date" min={draft.fpcSentDate || draft.directorApprovalDate || draft.memoDate || draft.requestDate || undefined} value={draft.fpcApprovalDate ?? ""} onChange={(event) => updateDraft("fpcApprovalDate", event.target.value)} /></Field>
           <Field label="Vendor Terpilih"><Input list="procurement-vendor-options" value={draft.selectedVendor} onChange={(event) => updateDraft("selectedVendor", event.target.value)} placeholder="Cari atau pilih vendor (A–Z)" /><datalist id="procurement-vendor-options">{vendorNames.map((vendor) => <option value={vendor} key={vendor} />)}</datalist></Field>
           <Field label="Nomor PO"><Input value={draft.poNumber} onChange={(event) => updateDraft("poNumber", event.target.value)} /></Field>
-          <Field label="Tanggal PO"><Input type="date" value={draft.poDate ?? ""} onChange={(event) => updateDraft("poDate", event.target.value)} /></Field>
+          <Field label="Tanggal PO"><Input type="date" min={draft.fpcApprovalDate || draft.fpcSentDate || draft.directorApprovalDate || draft.memoDate || draft.requestDate || undefined} value={draft.poDate ?? ""} onChange={(event) => updateDraft("poDate", event.target.value)} /></Field>
           <MoneyField label="Harga Awal Excl. PPN" value={initialPriceExcl} currency={draft.currency} onChange={(value) => updateDraft("initialPriceExcl", value)} />
           <MoneyField label="Harga Final Excl. PPN" value={draft.poAmountExcl} currency={draft.currency} onChange={(value) => updateDraft("poAmountExcl", value)} />
           <Field label="Amount PO Incl. PPN (otomatis)"><Input readOnly value={new Intl.NumberFormat("id-ID", { style: "currency", currency: draft.currency, maximumFractionDigits: 0 }).format(calculatedExpense)} className="bg-slate-50 font-semibold" /></Field>

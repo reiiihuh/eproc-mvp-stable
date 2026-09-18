@@ -38,7 +38,22 @@ const DEFAULT_SETTINGS: WorkspaceSettings = {
 
 const asText = (value: unknown) => String(value ?? "").trim()
 const hasValue = (value: unknown) => value !== undefined && value !== null && asText(value) !== ""
-const firstValue = (row: Record<string, unknown>, headers: string[]) => headers.map((header) => row[header]).find(hasValue)
+const normalizeHeader = (value: string) => value.toLowerCase().replace(/[^a-z0-9]+/g, "")
+const firstValue = (row: Record<string, unknown>, headers: string[]) => {
+  const normalized = new Map(Object.entries(row).map(([header, value]) => [normalizeHeader(header), value]))
+  return headers.map((header) => normalized.get(normalizeHeader(header))).find(hasValue)
+}
+const firstDateValue = (row: Record<string, unknown>, headers: string[], keywords: string[]) => {
+  const exact = firstValue(row, headers)
+  if (hasValue(exact)) return exact
+  const match = Object.entries(row).find(([header, value]) => {
+    const normalized = normalizeHeader(header)
+    return hasValue(value)
+      && keywords.every((keyword) => normalized.includes(keyword))
+      && (normalized.includes("tanggal") || normalized.startsWith("tgl") || normalized.includes("date"))
+  })
+  return match?.[1]
+}
 const asNumber = (value: unknown) => {
   if (typeof value === "number" && Number.isFinite(value)) return value
   const cleaned = String(value ?? "").replace(/[^0-9,.-]/g, "")
@@ -66,6 +81,8 @@ const excelDate = (value: unknown) => {
   }
   const text = asText(value)
   if (!text) return ""
+  const localDate = text.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})$/)
+  if (localDate) return `${localDate[3]}-${localDate[2].padStart(2, "0")}-${localDate[1].padStart(2, "0")}`
   const date = new Date(text)
   return Number.isNaN(date.getTime()) ? "" : date.toISOString().slice(0, 10)
 }
@@ -275,10 +292,12 @@ function parseMaster(sheet: XLSX.WorkSheet) {
       selectedVendor: asText(item["Vendor Terpilih"]),
       poNumber: asText(item["Nomor PO"]),
       poDate: excelDate(item["Tanggal PO"]),
-      memoDate: excelDate(firstValue(item, ["Tanggal Memo", "Tanggal Memo Izin", "Tanggal Memo Direksi", "Memo Date"])),
-      directorApprovalDate: excelDate(firstValue(item, ["Tanggal Persetujuan Direksi", "Tanggal Approval Direksi", "Approval Memo Direksi", "Direksi Approval Date"])),
-      fpcSentDate: excelDate(firstValue(item, ["Tanggal Send FPC", "Tanggal Kirim FPC", "Send FPC", "FPC Sent Date"])),
-      fpcApprovalDate: excelDate(firstValue(item, ["Tanggal Approval FPC", "Tanggal Persetujuan FPC", "Approval FPC", "FPC Approval Date"])),
+      memoDate: excelDate(firstDateValue(item, ["Tanggal Memo", "Tanggal Memo Izin", "Tanggal Memo Ijin", "Tanggal Memo Izin Prinsip", "Tanggal Memo Direksi", "Memo Date"], ["memo"])),
+      directorApprovalDate: excelDate(firstDateValue(item, ["Tanggal Persetujuan Direksi", "Tanggal Approval Direksi", "Approval Memo Direksi", "Direksi Approval Date"], ["direksi"])),
+      fpcSentDate: excelDate(firstDateValue(item, ["Tanggal Send FPC", "Tanggal Kirim FPC", "Send FPC", "FPC Sent Date"], ["fpc", "kirim"])
+        ?? firstDateValue(item, ["Tanggal Send FPC", "Send FPC", "FPC Sent Date"], ["fpc", "send"])),
+      fpcApprovalDate: excelDate(firstDateValue(item, ["Tanggal Approval FPC", "Tanggal Persetujuan FPC", "Approval FPC", "FPC Approval Date"], ["fpc", "approval"])
+        ?? firstDateValue(item, ["Tanggal Persetujuan FPC"], ["fpc", "persetujuan"])),
       poAmountExcl,
       initialPriceExcl: asNumber(item["Harga Awal Excl. PPN"] ?? item["Penawaran Awal"]),
       poAmountIncl,

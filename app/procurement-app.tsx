@@ -238,6 +238,20 @@ export default function ProcurementApp({ auth }: { auth: AuthenticatedProcuremen
 
   async function saveDraft() {
     if (!draft.itemName || !draft.requestDate || !draft.picName || !draft.procurementMethod) { toast.error("Tanggal request, PIC, nama, dan metode pengadaan wajib diisi."); return }
+    const dateSequence = [
+      ["Tanggal Request", draft.requestDate],
+      ["Tanggal Memo", draft.memoDate],
+      ["Tanggal Persetujuan Direksi", draft.directorApprovalDate],
+      ["Tanggal Kirim FPC", draft.fpcSentDate],
+      ["Tanggal Approval FPC", draft.fpcApprovalDate],
+      ["Tanggal PO", draft.poDate],
+    ].filter((entry): entry is [string, string] => Boolean(entry[1]))
+    for (let index = 1; index < dateSequence.length; index++) {
+      if (dateSequence[index][1] < dateSequence[index - 1][1]) {
+        toast.error(`${dateSequence[index][0]} tidak boleh sebelum ${dateSequence[index - 1][0]}.`)
+        return
+      }
+    }
     const draftYear = Number(draft.requestDate.slice(0, 4)) || currentYear
     const nextSequence = workspace.records.filter((record) => Number(record.requestDate.slice(0, 4)) === draftYear).length + 1
     const tenderOffers = draft.procurementMethod === "Tender" ? draft.offers : []
