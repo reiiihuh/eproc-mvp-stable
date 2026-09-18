@@ -23,7 +23,7 @@ export interface PortalReviewRepository {
   activateProcurementDataset(datasetKey: string): Promise<ProcurementDataset[]>
   archiveProcurementDataset(datasetKey: string): Promise<ProcurementDataset[]>
   resetProcurementSandbox(datasetKey: string, confirmation: string): Promise<ProcurementDataset[]>
-  upsertProcurementRecord(record: ProcurementRecord): Promise<{ sourceRow: number; requestId?: string }>
+  upsertProcurementRecord(record: ProcurementRecord, mode?: "create" | "edit"): Promise<{ sourceRow: number; requestId?: string }>
   deleteProcurementRecords(records: ProcurementRecord[]): Promise<void>
   upsertProcurementPic(pic: ProcurementPic): Promise<{ id: string; sourceRow: number }>
   deleteProcurementPics(pics: ProcurementPic[]): Promise<void>
@@ -126,7 +126,7 @@ export class AppsScriptPortalReviewRepository implements PortalReviewRepository 
     }).finally(() => { this.workspacePromise = undefined })
     return this.workspacePromise
   }
-  upsertProcurementRecord(record: ProcurementRecord) { return this.write<{ sourceRow: number; requestId?: string }>("procurement.upsertRecord", { record, datasetKey: this.datasetKey }) }
+  upsertProcurementRecord(record: ProcurementRecord, mode: "create" | "edit" = "create") { return this.write<{ sourceRow: number; requestId?: string }>("procurement.upsertRecord", { record, mode, datasetKey: this.datasetKey }) }
   async deleteProcurementRecords(records: ProcurementRecord[]) {
     await this.write<Record<string, unknown>>("procurement.deleteRecords", { datasetKey: this.datasetKey, records: records.map((record) => ({ sourceRow: record.sourceRow, requestId: record.requestId, originalRequestId: record.originalRequestId })) })
   }

@@ -166,10 +166,7 @@ export function formatRequestId(pattern: string, year: number, sequence: number)
     .replaceAll("{SEQ4}", String(sequence).padStart(4, "0"))
 }
 
-/**
- * Rebuilds display Request IDs in chronological order while preserving every
- * legacy number in originalRequestId for audit/reference purposes.
- */
+/** Dipertahankan untuk migrasi eksplisit; jangan dipakai saat memuat master aktif. */
 export function normalizeRequestIds(records: ProcurementRecord[], pattern: string) {
   const sequenceByYear = new Map<number, number>()
   return [...records]
@@ -377,7 +374,7 @@ export class XlsxWorkspaceAdapter implements WorkspaceAdapter {
     if (!master) throw new Error("Sheet MASTER DATABASE PENGADAAN tidak ditemukan.")
     progress?.("Memetakan master, PIC, vendor, dan dokumen")
     const records = mergeProcurementDocuments(workbook, mergeDynamicOffers(workbook, parseMaster(master)))
-    progress?.("Menormalisasi Request ID")
+    progress?.("Menyiapkan data pengadaan")
     return {
       version: 1 as const,
       importedAt: new Date().toISOString(),
@@ -386,7 +383,8 @@ export class XlsxWorkspaceAdapter implements WorkspaceAdapter {
       pics: parsePics(workbook, records),
       vendors: parseVendors(workbook),
       scorecards,
-      records: normalizeRequestIds(records, settings.requestIdPattern),
+      // Nomor request adalah identitas lintas portal dan master; jangan diubah saat dibaca.
+      records,
     }
   }
 

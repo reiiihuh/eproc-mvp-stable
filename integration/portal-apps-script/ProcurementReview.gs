@@ -5,7 +5,7 @@ function portalBody_(value) { return procurementBody_(value); }
 function testProcurementReviewModule() {
   var parsed = portalBody_({ payload: { ready: true } });
   if (!parsed.ready) throw new Error("PROCUREMENT_BODY_HELPER_FAILED");
-  Logger.log("Procurement Review backend siap: 2026-09-17.2");
+  Logger.log("Procurement Review backend siap: 2026-09-18.1");
   return true;
 }
 
@@ -253,8 +253,7 @@ function procurementPrepareDataset_(body) {
     var offersName = "PENAWARAN VENDOR " + year;
     var documentsName = "DOKUMEN PENGADAAN " + year;
     [masterName, offersName, documentsName].forEach(function (name) { if (spreadsheet.getSheetByName(name)) throw new Error("SHEET_EXISTS: Sheet " + name + " sudah tersedia."); });
-    var masterSheet = procurementCreateDatasetSheet_("MASTER DATABASE PENGADAAN", masterName, "Nomor Request");
-    procurementEnsureMasterHeaders_(masterSheet, ["Currency", "Keterangan Status", "Jenis Budget", "Harga Awal Excl. PPN", "Request ID Asli", "Tanggal Memo", "Tanggal Persetujuan Direksi", "Tanggal Send FPC", "Tanggal Approval FPC"]);
+    procurementCreateDatasetSheet_("MASTER DATABASE PENGADAAN", masterName, "Nomor Request");
     procurementCreateDatasetSheet_("PENAWARAN VENDOR", offersName, "Request ID");
     procurementCreateDatasetSheet_("DOKUMEN PENGADAAN", documentsName, "Request ID");
     var now = new Date();
@@ -364,16 +363,20 @@ function procurementUpsertRecord_(body) {
     if (dataset.status === "ARCHIVED") throw new Error("DATASET_ARCHIVED: Dataset arsip hanya dapat dibaca.");
     var sheet = getSpreadsheet_().getSheetByName(dataset.masterSheet);
     if (!sheet) throw new Error("SHEET_NOT_FOUND: " + dataset.masterSheet + ".");
-    var context = procurementEnsureMasterHeaders_(sheet, ["Currency", "Keterangan Status", "Jenis Budget", "Harga Awal Excl. PPN", "Request ID Asli", "Tanggal Memo", "Tanggal Persetujuan Direksi", "Tanggal Send FPC", "Tanggal Approval FPC"]);
+    // Kolom opsional yang sengaja dihapus tidak dibuat lagi di ujung sheet.
+    var context = procurementMasterContext_(sheet);
     var rows = portalRowsFromSheet_(sheet, context.headers, context.headerRow);
     var ids = [record.requestId, record.originalRequestId].map(function (value) { return String(value || "").trim(); }).filter(Boolean);
     var existing = rows.filter(function (row) {
       return ids.indexOf(String(row["Nomor Request"] || "").trim()) >= 0 || ids.indexOf(String(row["Request ID Asli"] || "").trim()) >= 0;
     })[0];
     var requestedRow = Number(record.sourceRow || 0);
-    if (!existing && requestedRow > context.headerRow && requestedRow <= sheet.getLastRow()) {
+    var mode = String(body.mode || "create").toLowerCase();
+    if (mode === "edit") {
+      if (!(requestedRow > context.headerRow && requestedRow <= sheet.getLastRow())) throw new Error("ROW_NOT_FOUND: Baris edit tidak valid. Refresh dashboard lalu coba lagi.");
       var candidate = rows.filter(function (row) { return row.__rowNumber === requestedRow; })[0];
-      if (candidate && ids.indexOf(String(candidate["Nomor Request"] || "").trim()) >= 0) existing = candidate;
+      if (!candidate || !String(candidate["Nomor Request"] || "").trim()) throw new Error("ROW_NOT_FOUND: Data edit sudah berubah atau terhapus. Refresh dashboard lalu coba lagi.");
+      existing = candidate;
     }
     if (!existing && !dataset.legacy) {
       record.requestId = procurementNextMasterId_(sheet, context.headers, context.headerRow, dataset);
@@ -609,7 +612,12 @@ function procurementNextDataRow_(sheet, context) {
 }
 
 function procurementWritePatches_(sheet, rowNumber, headers, patches) {
-  var cells = Object.keys(patches).map(function (header) { return { column: headers.indexOf(header), value: patches[header] }; }).filter(function (cell) { return cell.column >= 0; }).sort(function (a, b) { return a.column - b.column; });
+  var cells = Object.keys(patches).map(function (header) {
+    var columns = [];
+    headers.forEach(function (value, index) { if (value === header) columns.push(index); });
+    if (columns.length > 1) throw new Error("MASTER_HEADER_AMBIGUOUS: Header " + header + " ditemukan lebih dari sekali. Hapus kolom lama yang tidak digunakan atau beri nama unik sebelum menyimpan.");
+    return { column: columns.length ? columns[0] : -1, value: patches[header] };
+  }).filter(function (cell) { return cell.column >= 0; }).sort(function (a, b) { return a.column - b.column; });
   var groups = [];
   cells.forEach(function (cell) {
     var group = groups[groups.length - 1];
@@ -670,23 +678,20 @@ function procurementPromoteApproved_(request, actor, now, approval) {
   var headers = masterContext.headers;
   if (headers.indexOf("Nomor Request") < 0) throw new Error("MASTER_HEADER_REQUIRED: Header Nomor Request tidak ditemukan; promotion dibatalkan tanpa mengubah master.");
 
-  // Sheet lama menyimpan nomor portal langsung di Nomor Request. Sheet baru dapat
-  // memakai Request ID Asli dan Nomor Request terpisah. Keduanya tetap idempotent.
-  var hasOriginalRequestId = headers.indexOf("Request ID Asli") >= 0;
-  var reconciliationHeader = hasOriginalRequestId ? "Request ID Asli" : "Nomor Request";
+  // Satu nomor dipakai end-to-end: REQUEST_NUMBER portal adalah Nomor Request master.
+  var portalRequestNumber = String(request.REQUEST_NUMBER || "").trim();
+  if (!portalRequestNumber) throw new Error("REQUEST_NUMBER_REQUIRED: Nomor request portal tidak tersedia.");
   var existing = portalRowsFromSheet_(sheet, headers, masterContext.headerRow).filter(function (row) {
-    return String(row[reconciliationHeader] || "").trim() === String(request.REQUEST_NUMBER || "").trim();
+    return String(row["Nomor Request"] || "").trim() === portalRequestNumber
+      || String(row["Request ID Asli"] || "").trim() === portalRequestNumber;
   })[0];
-  var masterId = existing
-    ? String(existing["Nomor Request"] || request.REQUEST_NUMBER)
-    : hasOriginalRequestId
-      ? procurementNextMasterId_(sheet, headers, masterContext.headerRow, dataset)
-      : String(request.REQUEST_NUMBER);
+  var masterId = portalRequestNumber;
   var requestDate = procurementDateOnly_(request.SUBMITTED_AT || request.CREATED_AT || now);
   if (!existing) {
     var values = {
       "Nomor Request": masterId,
-      "Request ID Asli": request.REQUEST_NUMBER,
+      // Kompatibilitas sheet lama; bila kolom ini sudah dihapus, nilainya diabaikan.
+      "Request ID Asli": portalRequestNumber,
       "Nama": request.REQUESTER_NAME,
       "Alamat Email User": request.REQUESTER_EMAIL,
       "Group/Div": request.REQUESTER_DIVISION || "",
@@ -704,6 +709,10 @@ function procurementPromoteApproved_(request, actor, now, approval) {
     procurementFormatMasterRequestDate_(sheet, sheet.getLastRow(), headers, requestDate);
     SpreadsheetApp.flush();
   } else {
+    var requestColumn = headers.indexOf("Nomor Request");
+    if (requestColumn >= 0 && String(existing["Nomor Request"] || "").trim() !== masterId) {
+      sheet.getRange(existing.__rowNumber, requestColumn + 1).setValue(masterId);
+    }
     var existingStatus = String(existing.Status || "").trim().toUpperCase();
     var statusColumn = headers.indexOf("Status");
     if (statusColumn >= 0 && (!existingStatus || existingStatus === "UPCOMING")) {

@@ -225,7 +225,7 @@ export default function ProcurementApp({ auth }: { auth: AuthenticatedProcuremen
     const saved: ProcurementRecord = { ...draft, initialPriceExcl, offers: tenderOffers, documents: draft.documents.filter((document) => document.name || document.webViewLink), requestId: editMode === "edit" ? draft.requestId : formatRequestId(workspace.settings.requestIdPattern, draftYear, nextSequence), selectedVendor: winner?.vendor || draft.selectedVendor, poAmountExcl, poAmountIncl: poAmountExcl * 1.11, efficiency: Math.max(0, initialPriceExcl - poAmountExcl) * 1.11 }
     showOperation(editMode === "edit" ? "Memperbarui pengadaan" : "Menambah pengadaan", "Menulis langsung ke master spreadsheet", 3)
     try {
-      const persisted = await backendWorkspace.upsertProcurement(saved)
+      const persisted = await backendWorkspace.upsertProcurement(saved, editMode)
       setWorkspace((current) => ({ ...current, records: editMode === "edit" ? current.records.map((record) => record.recordUid === persisted.recordUid ? persisted : record) : [...current.records, persisted] }))
       const portalId = persisted.originalRequestId || persisted.requestId
       if (portalId.startsWith("NPR-")) {
