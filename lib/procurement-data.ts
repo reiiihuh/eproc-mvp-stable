@@ -33,7 +33,7 @@ const DEFAULT_SETTINGS: WorkspaceSettings = {
   driveRootFolder: "Pengadaan IT",
   sheetsSpreadsheetUrl: "",
   defaultPageSize: 10,
-  autoRefreshSeconds: 30,
+  autoRefreshSeconds: 120,
 }
 
 const asText = (value: unknown) => String(value ?? "").trim()
@@ -102,8 +102,12 @@ const fnv = (input: string) => {
   }
   return (hash >>> 0).toString(36)
 }
-const rowObject = (headers: string[], row: unknown[]) =>
-  Object.fromEntries(headers.map((header, index) => [header, row[index]]))
+// Master lama memiliki beberapa nama header ganda. Kolom pertama adalah blok
+// pengadaan/Memo Pembelian; jangan biarkan blok pembayaran menimpa nilainya.
+const rowObject = (headers: string[], row: unknown[]) => headers.reduce<Record<string, unknown>>((result, header, index) => {
+  if (header && !(header in result)) result[header] = row[index]
+  return result
+}, {})
 
 function parsePics(workbook: XLSX.WorkBook, records: ProcurementRecord[]): ProcurementPic[] {
   const sheet = workbook.Sheets["MASTER PIC"]

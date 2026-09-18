@@ -5,7 +5,7 @@ function portalBody_(value) { return procurementBody_(value); }
 function testProcurementReviewModule() {
   var parsed = portalBody_({ payload: { ready: true } });
   if (!parsed.ready) throw new Error("PROCUREMENT_BODY_HELPER_FAILED");
-  Logger.log("Procurement Review backend siap: 2026-09-18.1");
+  Logger.log("Procurement Review backend siap: 2026-09-18.2");
   return true;
 }
 
@@ -425,6 +425,12 @@ function procurementUpsertRecord_(body) {
       "Amount Efficiency incld PPN": Number(record.efficiency || 0),
       "Currency": record.currency
     };
+    // Beberapa template lama memakai nama yang lebih spesifik untuk memo pembelian.
+    var memoHeader = procurementFirstHeader_(context.headers, ["Tanggal Memo", "Tanggal Memo Pembelian", "Tanggal Memo Izin", "Tanggal Memo Ijin", "Tanggal Memo Izin Prinsip"]);
+    if (memoHeader && memoHeader !== "Tanggal Memo") {
+      patches[memoHeader] = patches["Tanggal Memo"];
+      delete patches["Tanggal Memo"];
+    }
     procurementWritePatches_(sheet, rowNumber, context.headers, patches);
     ["Harga Awal Excl. PPN", "Amount PO Excl. PPN", "Amount PO Incld. PPN", "Amount Efficiency incld PPN"].forEach(function (header) {
       var column = context.headers.indexOf(header);
@@ -619,7 +625,7 @@ function procurementWritePatches_(sheet, rowNumber, headers, patches) {
   var cells = Object.keys(patches).map(function (header) {
     var columns = [];
     headers.forEach(function (value, index) { if (value === header) columns.push(index); });
-    if (columns.length > 1) throw new Error("MASTER_HEADER_AMBIGUOUS: Header " + header + " ditemukan lebih dari sekali. Hapus kolom lama yang tidak digunakan atau beri nama unik sebelum menyimpan.");
+    // Pada master lama, kemunculan pertama berada di blok pengadaan/Memo Pembelian.
     return { column: columns.length ? columns[0] : -1, value: patches[header] };
   }).filter(function (cell) { return cell.column >= 0; }).sort(function (a, b) { return a.column - b.column; });
   var groups = [];
@@ -629,6 +635,13 @@ function procurementWritePatches_(sheet, rowNumber, headers, patches) {
     else group.push(cell);
   });
   groups.forEach(function (group) { sheet.getRange(rowNumber, group[0].column + 1, 1, group.length).setValues([group.map(function (cell) { return cell.value === undefined ? "" : cell.value; })]); });
+}
+
+function procurementFirstHeader_(headers, aliases) {
+  for (var index = 0; index < aliases.length; index++) {
+    if (headers.indexOf(aliases[index]) >= 0) return aliases[index];
+  }
+  return "";
 }
 
 function procurementReplaceOffers_(record, dataset) {

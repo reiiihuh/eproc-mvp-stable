@@ -45,9 +45,12 @@ export class AppsScriptPortalReviewRepository implements PortalReviewRepository 
   private async call<T>(action: string, payload: Record<string, unknown> = {}) {
     const retryable = ["getProcurementSession", "listReviewQueue", "getProcurementRequestDetail", "getProcurementWorkspace", "listProcurementDatasets", "syncProcurementStatus"].includes(action)
     let lastError: unknown
-    for (let attempt = 0; attempt < (retryable ? 2 : 1); attempt++) {
+    // Proxy same-origin sudah menangani retry. Hindari retry bertingkat yang dapat
+    // membuat sampai empat eksekusi Apps Script untuk satu aksi browser.
+    const attempts = retryable && !this.endpoint.startsWith("/api/") ? 2 : 1
+    for (let attempt = 0; attempt < attempts; attempt++) {
       const controller = new AbortController()
-      const timeout = window.setTimeout(() => controller.abort(), 25_000)
+      const timeout = window.setTimeout(() => controller.abort(), this.endpoint.startsWith("/api/") ? 40_000 : 25_000)
       try {
         const response = await fetch(this.endpoint, {
           method: "POST",
@@ -61,7 +64,7 @@ export class AppsScriptPortalReviewRepository implements PortalReviewRepository 
         return result.data
       } catch (error) {
         lastError = error
-        if (!retryable || attempt > 0) break
+        if (!retryable || attempt >= attempts - 1) break
         await new Promise((resolve) => window.setTimeout(resolve, 500 + attempt * 400))
       } finally { window.clearTimeout(timeout) }
     }

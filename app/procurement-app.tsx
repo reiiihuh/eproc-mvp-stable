@@ -49,7 +49,10 @@ function initialWorkspaceState(): ProcurementWorkspace {
   if (typeof window === "undefined") return initialWorkspace
   try {
     const saved = window.localStorage.getItem("procurement-sheets-lab.settings")
-    return saved ? { ...initialWorkspace, settings: { ...initialWorkspace.settings, ...JSON.parse(saved) as Partial<ProcurementWorkspace["settings"]> } } : initialWorkspace
+    if (!saved) return initialWorkspace
+    const settings = { ...initialWorkspace.settings, ...JSON.parse(saved) as Partial<ProcurementWorkspace["settings"]> }
+    if (settings.autoRefreshSeconds && settings.autoRefreshSeconds < 120) settings.autoRefreshSeconds = 120
+    return { ...initialWorkspace, settings }
   } catch { return initialWorkspace }
 }
 
@@ -91,6 +94,7 @@ export default function ProcurementApp({ auth }: { auth: AuthenticatedProcuremen
   const [selectedDatasetKey, setSelectedDatasetKey] = useState("")
   const fileInput = useRef<HTMLInputElement>(null)
   const autoWorkspaceAttempted = useRef(false)
+  const workspaceRefreshInFlight = useRef(false)
   const backendWorkspace = useMemo(() => new AppsScriptWorkspaceAdapter(auth.repository), [auth.repository])
 
   useEffect(() => { window.localStorage.setItem("procurement-sheets-lab.settings", JSON.stringify(workspace.settings)) }, [workspace.settings])
@@ -122,9 +126,20 @@ export default function ProcurementApp({ auth }: { auth: AuthenticatedProcuremen
   }, [auth.repository, backendWorkspace, workspace.scorecards, workspace.settings])
   useEffect(() => {
     if (!sheetConnection) return
-    const seconds = workspace.settings.autoRefreshSeconds ?? 30
+    const configuredSeconds = workspace.settings.autoRefreshSeconds ?? 120
+    const seconds = configuredSeconds ? Math.max(configuredSeconds, 120) : 0
     if (!seconds) return
-    const timer = window.setInterval(() => { void backendWorkspace.loadWorkspace(workspace.settings, workspace.scorecards).then((latest) => { setWorkspace((current) => ({ ...latest, settings: current.settings })); setSheetConnection((current) => current ? { ...current, lastSyncedAt: new Date().toISOString() } : current) }).catch(() => undefined) }, seconds * 1000)
+    const refresh = async () => {
+      if (document.hidden || workspaceRefreshInFlight.current) return
+      workspaceRefreshInFlight.current = true
+      try {
+        const latest = await backendWorkspace.loadWorkspace(workspace.settings, workspace.scorecards)
+        setWorkspace((current) => ({ ...latest, settings: current.settings }))
+        setSheetConnection((current) => current ? { ...current, lastSyncedAt: new Date().toISOString() } : current)
+      } catch { /* Sinkron berikutnya akan mencoba kembali tanpa mengganggu layar aktif. */ }
+      finally { workspaceRefreshInFlight.current = false }
+    }
+    const timer = window.setInterval(() => { void refresh() }, seconds * 1000)
     return () => window.clearInterval(timer)
   }, [backendWorkspace, sheetConnection, workspace.scorecards, workspace.settings])
 
@@ -214,26 +229,11 @@ export default function ProcurementApp({ auth }: { auth: AuthenticatedProcuremen
   function selectPic(pic: ProcurementPic) { setDraft((current) => ({ ...current, picName: pic.name, division: pic.division, position: pic.position, email: pic.email, location: pic.location })) }
   function changeOffer(index: number, patch: Partial<TenderOffer>) { updateDraft("offers", draft.offers.map((offer, offerIndex) => patch.winner && offerIndex !== index ? { ...offer, winner: false } : offerIndex === index ? { ...offer, ...patch } : offer)) }
 
-  async function openLatestRecordForEdit(record: ProcurementRecord) {
-    const loadingToast = toast.loading(`Memuat data terbaru ${record.requestId}...`)
-    try {
-      const latest = await backendWorkspace.loadWorkspace(workspace.settings, workspace.scorecards)
-      const latestRecord = latest.records.find((candidate) =>
-        candidate.recordUid === record.recordUid
-        || (record.sourceRow != null && candidate.sourceRow === record.sourceRow)
-        || candidate.requestId === record.requestId
-        || (Boolean(record.originalRequestId) && candidate.originalRequestId === record.originalRequestId),
-      )
-      if (!latestRecord) throw new Error(`${record.requestId} tidak ditemukan pada database terbaru.`)
-      setWorkspace((current) => ({ ...latest, settings: current.settings }))
-      setSheetConnection((current) => current ? { ...current, lastSyncedAt: new Date().toISOString() } : current)
-      setDraft(structuredClone(latestRecord))
-      setEditMode("edit")
-      setDialogOpen(true)
-      toast.success("Data terbaru berhasil dimuat.", { id: loadingToast })
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Data terbaru gagal dimuat.", { id: loadingToast })
-    }
+  function openLatestRecordForEdit(record: ProcurementRecord) {
+    // Snapshot sudah disinkronkan berkala; validasi baris terbaru tetap dilakukan backend saat Simpan.
+    setDraft(structuredClone(record))
+    setEditMode("edit")
+    setDialogOpen(true)
   }
 
   async function saveDraft() {
