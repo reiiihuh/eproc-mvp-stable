@@ -2,7 +2,7 @@ import type { Metadata } from "next"
 import "./globals.css"
 
 export const metadata: Metadata = {
-  title: "e-Proc MVP",
+  title: "e-Proc Dashboard Dev",
   description: "Workspace pengadaan IT berbasis file dengan tender, dashboard, dokumen, dan export laporan.",
   icons: { icon: "/favicon.png", shortcut: "/favicon.png" },
   other: { "codex-preview": "development" },
