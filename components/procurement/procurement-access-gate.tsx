@@ -3,9 +3,8 @@
 import Image from "next/image"
 import dynamic from "next/dynamic"
 import { useEffect, useRef, useState } from "react"
-import { LoaderCircle, LogIn } from "lucide-react"
-import { Button } from "@/components/ui/button"
-import { clearGoogleIdentitySelection, requestGoogleIdentity } from "@/lib/google-drive"
+import { LoaderCircle } from "lucide-react"
+import { clearGoogleIdentitySelection, renderGoogleIdentityButton } from "@/lib/google-drive"
 import { AppsScriptPortalReviewRepository } from "@/lib/portal-review-repository"
 import type { ProcurementSession } from "@/lib/portal-review-types"
 
@@ -33,6 +32,7 @@ export function ProcurementAccessGate() {
   const [error, setError] = useState("")
   const [config, setConfig] = useState<PublicConfig | null>(null)
   const restoreAttempted = useRef(false)
+  const googleButton = useRef<HTMLDivElement>(null)
   const configured = Boolean(config?.googleClientId && config?.appsScriptUrl)
 
   useEffect(() => {
@@ -56,25 +56,37 @@ export function ProcurementAccessGate() {
     return () => { cancelled = true; window.clearTimeout(timer) }
   }, [configured, config, auth])
 
-  async function login() {
-    setBusy(true); setError("")
-    try {
-      if (!config || !configured) throw new Error("Konfigurasi login belum tersedia.")
-      const idToken = await requestGoogleIdentity(config.googleClientId)
-      const repository = new AppsScriptPortalReviewRepository(config.appsScriptUrl, idToken)
-      const session = await repository.getSession()
-      if (session.role !== "PROCUREMENT_ADMIN") throw new Error("Akun tidak memiliki akses.")
-      sessionStorage.setItem("eproc.google-id-token", idToken)
-      setAuth({ session: { ...session, picture: profilePicture(idToken) }, idToken, googleClientId: config.googleClientId, repository, logout: () => { sessionStorage.removeItem("eproc.google-id-token"); clearGoogleIdentitySelection(); setAuth(null) } })
-    } catch (reason) { setError(reason instanceof Error ? reason.message : "Login gagal.") }
-    finally { setBusy(false) }
-  }
+  useEffect(() => {
+    const parent = googleButton.current
+    if (!configured || !config || !parent || auth) return
+    let cancelled = false
+
+    renderGoogleIdentityButton(config.googleClientId, parent, async (idToken) => {
+      if (cancelled) return
+      setBusy(true); setError("")
+      try {
+        const repository = new AppsScriptPortalReviewRepository(config.appsScriptUrl, idToken)
+        const session = await repository.getSession()
+        if (session.role !== "PROCUREMENT_ADMIN") throw new Error("Akun tidak memiliki akses.")
+        sessionStorage.setItem("eproc.google-id-token", idToken)
+        if (!cancelled) setAuth({ session: { ...session, picture: profilePicture(idToken) }, idToken, googleClientId: config.googleClientId, repository, logout: () => { sessionStorage.removeItem("eproc.google-id-token"); clearGoogleIdentitySelection(); setAuth(null) } })
+      } catch (reason) {
+        if (!cancelled) setError(reason instanceof Error ? reason.message : "Login gagal.")
+      } finally {
+        if (!cancelled) setBusy(false)
+      }
+    }).catch((reason) => {
+      if (!cancelled) setError(reason instanceof Error ? reason.message : "Tombol login Google gagal dimuat.")
+    })
+
+    return () => { cancelled = true; parent.replaceChildren() }
+  }, [configured, config, auth])
 
   if (auth) return <ProcurementApp auth={auth} />
   return <main className="grid min-h-screen place-items-center bg-[#f3f7fb] p-5">
     <section className="w-full max-w-sm overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl shadow-[#082f63]/10">
       <div className="h-1.5 bg-[#73d94b]" />
-      <div className="p-8"><div className="relative mx-auto h-28 w-full overflow-hidden"><Image src="/brand/nanobank-syariah.png" alt="NanoBank Syariah" fill priority unoptimized className="object-cover object-[center_42%]" /></div><div className="mt-8 text-center"><h1 className="font-display text-2xl font-bold text-[#082f63]">Procurement Control</h1><p className="mt-1 text-sm text-slate-500">Admin login</p></div><div className="mt-8 space-y-3">{error && <p className="rounded-lg bg-rose-50 px-3 py-2 text-center text-sm text-rose-700">{error}</p>}<Button className="h-11 w-full rounded-lg bg-[#082f63] hover:bg-[#174a7d]" disabled={!configured || busy} onClick={login}>{busy ? <LoaderCircle className="animate-spin" /> : <LogIn />}{busy ? "Masuk..." : "Masuk dengan Google"}</Button></div></div>
+      <div className="p-8"><div className="relative mx-auto h-28 w-full overflow-hidden"><Image src="/brand/nanobank-syariah.png" alt="NanoBank Syariah" fill priority unoptimized className="object-cover object-[center_42%]" /></div><div className="mt-8 text-center"><h1 className="font-display text-2xl font-bold text-[#082f63]">Procurement Control</h1><p className="mt-1 text-sm text-slate-500">Admin login</p></div><div className="mt-8 space-y-3">{error && <p className="rounded-lg bg-rose-50 px-3 py-2 text-center text-sm text-rose-700">{error}</p>}<div className="relative min-h-11 w-full"><div ref={googleButton} className={busy ? "pointer-events-none flex w-full justify-center opacity-40" : "flex w-full justify-center"} />{busy && <div className="absolute inset-0 flex items-center justify-center rounded-sm bg-white/80 text-sm font-semibold text-[#082f63]"><LoaderCircle className="mr-2 size-4 animate-spin" />Masuk...</div>}</div></div></div>
     </section>
   </main>
 }

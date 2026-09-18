@@ -5,18 +5,26 @@ import ts from "typescript"
 
 const source = await readFile(new URL("../lib/procurement-sla.ts", import.meta.url), "utf8")
 const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 } }).outputText
-const { calculateSlaMetrics } = await import(`data:text/javascript;base64,${Buffer.from(compiled).toString("base64")}`)
+const { businessDaysBetween, calculateSlaMetrics } = await import(`data:text/javascript;base64,${Buffer.from(compiled).toString("base64")}`)
 
-test("SLA hanya memakai proyek dengan pasangan tanggal valid", () => {
+test("hari kerja mengecualikan Sabtu dan Minggu", () => {
+  assert.equal(businessDaysBetween("2026-01-01", "2026-01-05"), 2)
+  assert.equal(businessDaysBetween("2026-01-03", "2026-01-05"), 1)
+  assert.equal(businessDaysBetween("2026-01-05", "2026-01-05"), 0)
+  assert.equal(businessDaysBetween("2026-01-06", "2026-01-05"), null)
+})
+
+test("empat SLA memakai rata-rata hari kerja dari pengadaan Complete saja", () => {
   const records = [
-    { memoDate: "2026-01-01", directorApprovalDate: "2026-01-05", fpcSentDate: "2026-01-06", fpcApprovalDate: "2026-01-09", poDate: "2026-01-11" },
-    { memoDate: "2026-02-01", directorApprovalDate: "2026-02-07", fpcSentDate: "", fpcApprovalDate: "", poDate: "2026-02-13" },
-    { memoDate: "", directorApprovalDate: "", fpcSentDate: "2026-03-05", fpcApprovalDate: "2026-03-04", poDate: "" },
+    { status: "Complete", requestDate: "2026-01-01", memoDate: "2026-01-05", fpcSentDate: "2026-01-06", fpcApprovalDate: "2026-01-09", poDate: "2026-01-12" },
+    { status: "Complete", requestDate: "2026-02-02", memoDate: "2026-02-07", fpcSentDate: "2026-02-09", fpcApprovalDate: "", poDate: "2026-02-13" },
+    { status: "Ongoing", requestDate: "2026-03-02", memoDate: "2026-03-03", fpcSentDate: "2026-03-04", fpcApprovalDate: "2026-03-05", poDate: "2026-03-06" },
   ]
-  const [memo, fpc, procurement] = calculateSlaMetrics(records)
-  assert.deepEqual({ average: memo.averageDays, valid: memo.calculable, missing: memo.unavailable }, { average: 5, valid: 2, missing: 1 })
-  assert.deepEqual({ average: fpc.averageDays, valid: fpc.calculable, missing: fpc.unavailable }, { average: 3, valid: 1, missing: 2 })
-  assert.deepEqual({ average: procurement.averageDays, valid: procurement.calculable, missing: procurement.unavailable }, { average: 11, valid: 2, missing: 1 })
+  const [procurement, memoApproval, fpc, total] = calculateSlaMetrics(records)
+  assert.deepEqual({ average: procurement.averageDays, valid: procurement.calculable, missing: procurement.unavailable }, { average: 3, valid: 2, missing: 0 })
+  assert.deepEqual({ average: memoApproval.averageDays, valid: memoApproval.calculable, missing: memoApproval.unavailable }, { average: 1, valid: 2, missing: 0 })
+  assert.deepEqual({ average: fpc.averageDays, valid: fpc.calculable, missing: fpc.unavailable }, { average: 3, valid: 1, missing: 1 })
+  assert.deepEqual({ average: total.averageDays, valid: total.calculable, missing: total.unavailable }, { average: 8, valid: 2, missing: 0 })
 })
 
 test("parser dan backend mempertahankan empat tanggal SLA", async () => {

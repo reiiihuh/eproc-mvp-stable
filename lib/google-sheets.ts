@@ -148,6 +148,10 @@ export class GoogleSheetsWorkspaceAdapter {
     await this.ensureHeader(context, SHEETS.procurements, "Jenis Budget")
     await this.ensureHeader(context, SHEETS.procurements, "Harga Awal Excl. PPN")
     await this.ensureHeader(context, SHEETS.procurements, "Request ID Asli")
+    await this.ensureHeader(context, SHEETS.procurements, "Tanggal Memo")
+    await this.ensureHeader(context, SHEETS.procurements, "Tanggal Persetujuan Direksi")
+    await this.ensureHeader(context, SHEETS.procurements, "Tanggal Send FPC")
+    await this.ensureHeader(context, SHEETS.procurements, "Tanggal Approval FPC")
     const isNew = !record.sourceRow || record.sourceRow <= context.headerIndex + 1
     const rowNumber = isNew ? this.appendRow(context, ["Nomor Request", "Tanggal Request", "Item"]) : record.sourceRow!
     if (isNew) await this.copyPreviousRow(context.sheetId, rowNumber, 204)
@@ -159,8 +163,8 @@ export class GoogleSheetsWorkspaceAdapter {
       Kategori: record.category, "Jenis Permintaan": record.requestKind, PeriodeAwal: record.periodStart || "",
       PeriodeAkhir: record.periodEnd || "", "Metode Pengadaan": record.procurementMethod, Budget: record.budget, "Jenis Budget": record.budgetType || "",
       "Kode Budget": record.budgetCode, "Vendor Terpilih": record.selectedVendor, "Nomor PO": record.poNumber,
-      "Tanggal PO": record.poDate || "", "Tanggal Memo": record.memoDate || "", "Tanggal Persetujuan Direksi": record.directorApprovalDate || "", "Tanggal Send FPC": record.fpcSentDate || "", "Tanggal Approval FPC": record.fpcApprovalDate || "", "Harga Awal Excl. PPN": record.initialPriceExcl || 0, "Amount PO Excl. PPN": record.poAmountExcl,
-      "Amount PO Incld. PPN": record.poAmountIncl, "Amount Efficiency incld PPN": record.efficiency, Currency: record.currency,
+      "Tanggal PO": record.poDate || "", "Tanggal Memo": record.memoDate || "", "Tanggal Persetujuan Direksi": record.directorApprovalDate || "", "Tanggal Send FPC": record.fpcSentDate || "", "Tanggal Approval FPC": record.fpcApprovalDate || "", "Harga Awal Excl. PPN": Number(record.initialPriceExcl || 0), "Amount PO Excl. PPN": Number(record.poAmountExcl || 0),
+      "Amount PO Incld. PPN": Number(record.poAmountIncl || 0), "Amount Efficiency incld PPN": Number(record.efficiency || 0), Currency: record.currency,
     })
     await this.replaceOffers(sheetRequestId, record.procurementMethod === "Tender" ? record.offers : [])
     return { ...record, sourceRow: rowNumber }

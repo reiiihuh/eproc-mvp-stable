@@ -31,6 +31,18 @@ declare global {
         id: {
           initialize(config: { client_id: string; callback: (response: GoogleCredentialResponse) => void; auto_select?: boolean }): void
           prompt(callback?: (notification: { isNotDisplayed(): boolean; isSkippedMoment(): boolean }) => void): void
+          renderButton(
+            parent: HTMLElement,
+            options: {
+              type: "standard"
+              theme: "filled_blue"
+              size: "large"
+              text: "signin_with"
+              shape: "rectangular"
+              logo_alignment: "left"
+              width: number
+            },
+          ): void
           disableAutoSelect(): void
         }
         oauth2: {
@@ -65,6 +77,35 @@ export async function requestGoogleIdentity(clientId: string) {
         reject(new Error("Popup login Google tidak tersedia. Izinkan popup/cookie lalu coba lagi."))
       }
     })
+  })
+}
+
+/** Render tombol GIS resmi. One Tap tidak dipakai sebagai tombol login karena dapat disupresi FedCM/browser. */
+export async function renderGoogleIdentityButton(
+  clientId: string,
+  parent: HTMLElement,
+  onCredential: (idToken: string) => void,
+) {
+  await loadGoogleIdentity()
+  const identity = window.google?.accounts.id
+  if (!identity) throw new Error("Google Identity Services belum siap.")
+
+  parent.replaceChildren()
+  identity.initialize({
+    client_id: clientId,
+    auto_select: false,
+    callback: (response) => {
+      if (response.credential) onCredential(response.credential)
+    },
+  })
+  identity.renderButton(parent, {
+    type: "standard",
+    theme: "filled_blue",
+    size: "large",
+    text: "signin_with",
+    shape: "rectangular",
+    logo_alignment: "left",
+    width: Math.max(200, Math.min(320, parent.clientWidth || 320)),
   })
 }
 

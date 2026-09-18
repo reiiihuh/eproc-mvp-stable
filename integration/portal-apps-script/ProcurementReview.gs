@@ -419,13 +419,17 @@ function procurementUpsertRecord_(body) {
       "Tanggal Persetujuan Direksi": record.directorApprovalDate || "",
       "Tanggal Send FPC": record.fpcSentDate || "",
       "Tanggal Approval FPC": record.fpcApprovalDate || "",
-      "Harga Awal Excl. PPN": record.initialPriceExcl || 0,
-      "Amount PO Excl. PPN": record.poAmountExcl,
-      "Amount PO Incld. PPN": record.poAmountIncl,
-      "Amount Efficiency incld PPN": record.efficiency,
+      "Harga Awal Excl. PPN": Number(record.initialPriceExcl || 0),
+      "Amount PO Excl. PPN": Number(record.poAmountExcl || 0),
+      "Amount PO Incld. PPN": Number(record.poAmountIncl || 0),
+      "Amount Efficiency incld PPN": Number(record.efficiency || 0),
       "Currency": record.currency
     };
     procurementWritePatches_(sheet, rowNumber, context.headers, patches);
+    ["Harga Awal Excl. PPN", "Amount PO Excl. PPN", "Amount PO Incld. PPN", "Amount Efficiency incld PPN"].forEach(function (header) {
+      var column = context.headers.indexOf(header);
+      if (column >= 0) sheet.getRange(rowNumber, column + 1).setNumberFormat("#,##0.00");
+    });
     procurementReplaceOffers_(record, dataset);
     SpreadsheetApp.flush();
     return { ok: true, data: { sourceRow: rowNumber, requestId: record.requestId } };
