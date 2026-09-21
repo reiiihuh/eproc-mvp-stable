@@ -76,10 +76,10 @@ export function AddProcurementDialog({
 
   return <Dialog open={open} onOpenChange={setOpen}>
     <DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-4xl">
-      <DialogHeader><DialogTitle className="font-display text-xl">{mode === "edit" ? "Edit Pengadaan" : "Tambah Pengadaan"}</DialogTitle><DialogDescription>{mode === "edit" ? "Perbarui atribut master. Record UID tetap dipertahankan agar relasi Google Sheets tidak terputus." : "Request ID dibuat otomatis setelah disimpan. PIC dan metadata mengambil referensi workbook atau Google Sheets terakhir."}</DialogDescription></DialogHeader>
+      <DialogHeader><DialogTitle className="font-display text-xl">{mode === "edit" ? "Edit Pengadaan" : "Tambah Pengadaan"}</DialogTitle><DialogDescription>{mode === "edit" ? "Perbarui data pengadaan. Nomor Request dibuat otomatis dan tidak dapat diubah." : "Nomor Request dibuat otomatis saat disimpan. Pilih requester dan lengkapi data pengadaan."}</DialogDescription></DialogHeader>
       <div className="grid gap-7 py-2">
         <section className="grid gap-4 sm:grid-cols-2">
-          {mode === "edit" && <><Field label="Request ID"><Input value={draft.requestId} onChange={(event) => updateDraft("requestId", event.target.value)} /></Field><Field label="Request ID Asli"><Input value={draft.originalRequestId ?? ""} onChange={(event) => updateDraft("originalRequestId", event.target.value)} /></Field></>}
+          <Field label="Nomor Request"><Input value={mode === "edit" ? draft.requestId : ""} readOnly placeholder="Dibuat otomatis saat disimpan" /></Field>
           <Field label="Tanggal Request *"><Input type="date" value={draft.requestDate} onChange={(event) => updateDraft("requestDate", event.target.value)} /></Field>
           <Field label="Status"><Select value={draft.status} onValueChange={(value) => updateDraft("status", value as ProcurementStatus)}><SelectTrigger className="w-full"><SelectValue /></SelectTrigger><SelectContent>{STATUS_ORDER.map((status) => <SelectItem value={status} key={status}>{status}</SelectItem>)}</SelectContent></Select></Field>
           <Field label="Keterangan Status" className="sm:col-span-2"><Textarea value={draft.statusNotes ?? ""} onChange={(event) => updateDraft("statusNotes", event.target.value)} rows={2} placeholder="Contoh: Menunggu approval memo dari user" /></Field>

@@ -144,14 +144,12 @@ export class GoogleSheetsWorkspaceAdapter {
   /** Creates or updates one procurement, then keeps its tender offers in sync. */
   async upsertProcurement(record: ProcurementRecord) {
     const context = await this.context(SHEETS.procurements, "Nomor Request")
+    const memoHeader = context.headers.find((header) => header.replace(/\s+/g, " ").trim().toLowerCase() === "tanggal memo pembelian")
+    if (!memoHeader) throw new Error("Kolom Tanggal Memo Pembelian wajib tersedia. Tidak ada kolom baru yang dibuat.")
     await this.ensureHeader(context, SHEETS.procurements, "Currency")
     await this.ensureHeader(context, SHEETS.procurements, "Keterangan Status")
     await this.ensureHeader(context, SHEETS.procurements, "Jenis Budget")
     await this.ensureHeader(context, SHEETS.procurements, "Harga Awal Excl. PPN")
-    await this.ensureHeader(context, SHEETS.procurements, "Request ID Asli")
-    const memoHeader = ["Tanggal Memo Pembelian", "Tanggal Memo", "Tanggal Memo Izin", "Tanggal Memo Ijin", "Tanggal Memo Izin Prinsip", "Tanggal Memo Direksi", "Memo Date"]
-      .map((alias) => context.headers.find((header) => header.replace(/\s+/g, " ").trim().toLowerCase() === alias.toLowerCase())).find(Boolean) || "Tanggal Memo"
-    await this.ensureHeader(context, SHEETS.procurements, memoHeader)
     await this.ensureHeader(context, SHEETS.procurements, "Tanggal Persetujuan Direksi")
     await this.ensureHeader(context, SHEETS.procurements, "Tanggal Send FPC")
     await this.ensureHeader(context, SHEETS.procurements, "Tanggal Approval FPC")
@@ -160,7 +158,7 @@ export class GoogleSheetsWorkspaceAdapter {
     if (isNew) await this.copyPreviousRow(context.sheetId, rowNumber, 204)
     const sheetRequestId = record.requestId
     await this.writeCells(SHEETS.procurements, rowNumber, context.headers, {
-      Status: record.status, "Keterangan Status": record.statusNotes, "Nomor Request": sheetRequestId, "Request ID Asli": record.originalRequestId || "", Nama: record.picName, "Group/Div": record.division,
+      Status: record.status, "Keterangan Status": record.statusNotes, "Nomor Request": sheetRequestId, Nama: record.picName, "Group/Div": record.division,
       "Lvl Jabatan": record.position, Lokasi: record.location, "Tanggal Request": record.requestDate, Bentuk: record.requestType,
       "Alamat Email User": record.email, Item: record.itemName, Deskripsi: record.description, Qty: record.quantity,
       Kategori: record.category, "Jenis Permintaan": record.requestKind, PeriodeAwal: record.periodStart || "",

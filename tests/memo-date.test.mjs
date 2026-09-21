@@ -45,6 +45,50 @@ test("edit memo menulis kolom pembelian yang sama dengan pembacaan dan memasang 
   assert.equal(patches["Tanggal Memo\nPembelian"], "2026-09-24")
   assert.ok(!Object.hasOwn(patches, "Tanggal Memo"))
   assert.equal(slaRow, 3)
+  assert.equal(patches["Nomor Request"], "REQ-1")
+  assert.ok(!Object.hasOwn(patches, "Request ID Asli"))
+  assert.throws(() => backend.procurementUpsertRecord_({ mode: "edit", record: { requestId: "CHANGED", sourceRow: 3 } }), /REQUEST_NUMBER_IMMUTABLE/)
+  backend.procurementNextMasterId_ = () => "PROC-2026-0002"
+  backend.procurementNextDataRow_ = () => 2
+  backend.procurementUpsertRecord_({ mode: "create", record: { requestId: "FORGED", originalRequestId: "FORGED-OLD" } })
+  assert.equal(patches["Nomor Request"], "PROC-2026-0002")
+  assert.ok(!Object.hasOwn(patches, "Request ID Asli"))
+  backend.procurementUpsertRecord_({ mode: "create", record: {} })
+  assert.equal(patches["Nomor Request"], "PROC-2026-0002")
+  backend.procurementMasterContext_ = () => ({ headerRow: 1, headers: ["Nomor Request", "Tanggal Memo"] })
+  assert.throws(() => backend.procurementUpsertRecord_({ record: { requestId: "REQ-1" } }), /Tanggal Memo Pembelian wajib tersedia/)
+})
+
+test("migrasi membackup, memindahkan nilai lama, mengosongkan sumber, dan aman dijalankan ulang", () => {
+  const backend = vm.createContext({})
+  vm.runInContext(backendSource, backend)
+  const rows = [["Nomor Request", "Tanggal Memo Pembelian", "Tanggal Memo"], ["REQ-1", "2026-09-24", "2026-09-25"], ["REQ-2", "2026-09-10", ""]]
+  const events = []
+  const sheet = {
+    getDataRange: () => ({ getValues: () => rows.map(row => [...row]) }),
+    copyTo() { events.push("backup"); return { setName(name) { return { getName: () => name } } } },
+    getRange(row, col) { return {
+      setValue(value) { events.push("write"); rows[row - 1][col - 1] = value; return this },
+      setNumberFormat() { return this },
+      clearContent() { events.push("clear"); rows[row - 1][col - 1] = "" },
+    } },
+  }
+  backend.portalWithLock_ = fn => fn()
+  backend.getSpreadsheet_ = () => ({ getSheetByName: () => sheet })
+  backend.procurementDatasetRows_ = () => [{ masterSheet: "Master" }, { masterSheet: "Master" }]
+  backend.procurementMasterContext_ = () => ({ headerRow: 1, headers: rows[0] })
+  backend.procurementWriteSlaFormulas_ = () => events.push("sla")
+  backend.Utilities = { getUuid: () => "test-backup-id" }
+  backend.SpreadsheetApp = { flush() { events.push("flush") } }
+  backend.Logger = { log() {} }
+  assert.match(backend.migrateMemoToPembelian(), /^1 tanggal dipindahkan/)
+  assert.deepEqual(rows[1], ["REQ-1", "2026-09-25", ""])
+  assert.deepEqual(rows[2], ["REQ-2", "2026-09-10", ""])
+  assert.ok(events.indexOf("backup") < events.indexOf("write"))
+  assert.ok(events.indexOf("flush") < events.indexOf("clear"))
+  assert.ok(events.includes("sla"))
+  assert.match(backend.migrateMemoToPembelian(), /^0 tanggal dipindahkan/)
+  assert.equal(events.filter(event => event === "backup").length, 1)
 })
 
 test("snapshot memakai tanggal kalender spreadsheet, bukan tanggal UTC sebelumnya", () => {

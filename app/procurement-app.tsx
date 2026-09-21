@@ -28,11 +28,11 @@ import { Toaster } from "@/components/ui/sonner"
 import { AppsScriptWorkspaceAdapter } from "@/lib/apps-script-workspace"
 import { downloadBlob } from "@/lib/browser-download"
 import { requestDriveToken } from "@/lib/google-drive"
-import { defaultSettings, formatRequestId, XlsxWorkspaceAdapter } from "@/lib/procurement-data"
+import { defaultSettings, XlsxWorkspaceAdapter } from "@/lib/procurement-data"
 import type { ProcurementDataset, ProcurementPic, ProcurementRecord, ProcurementVendor, ProcurementWorkspace, TenderOffer } from "@/lib/procurement-types"
 import { STATUS_ORDER } from "@/lib/procurement-types"
 
-type MasterSortKey = "requestId" | "originalRequestId" | "description" | "status" | "requestDate" | "picName" | "selectedVendor" | "poNumber" | "poDate" | "poAmountIncl" | "efficiency" | "budget"
+type MasterSortKey = "requestId" | "description" | "status" | "requestDate" | "picName" | "selectedVendor" | "poNumber" | "poDate" | "poAmountIncl" | "efficiency" | "budget"
 const currentYear = new Date().getFullYear()
 const compact = new Intl.NumberFormat("id-ID", { notation: "compact", maximumFractionDigits: 1 })
 const legacyDatasetFallback: ProcurementDataset = { key: "LEGACY", year: currentYear, label: "Master lama", masterSheet: "MASTER DATABASE PENGADAAN", offersSheet: "PENAWARAN VENDOR", documentsSheet: "DOKUMEN PENGADAAN", status: "ACTIVE", environment: "LEGACY", active: true, lastSequence: 0, legacy: true }
@@ -65,7 +65,7 @@ const currencyBreakdown = (records: ProcurementRecord[], key: "poAmountIncl" | "
   return Object.entries(totals).filter(([, value]) => value).map(([currency, value]) => compactMoney(value, currency)).join(" · ") || "Rp 0"
 }
 const masterSortOptions: { value: MasterSortKey; label: string }[] = [
-  { value: "requestDate", label: "Tanggal request" }, { value: "requestId", label: "Request ID" }, { value: "originalRequestId", label: "Request ID asli" }, { value: "description", label: "Deskripsi" }, { value: "status", label: "Status" }, { value: "picName", label: "Requester" }, { value: "selectedVendor", label: "Vendor terpilih" }, { value: "poNumber", label: "Nomor PO" }, { value: "poDate", label: "Tanggal PO" }, { value: "poAmountIncl", label: "Nilai PO incl. PPN" }, { value: "efficiency", label: "Efisiensi" }, { value: "budget", label: "Budget" },
+  { value: "requestDate", label: "Tanggal request" }, { value: "requestId", label: "Nomor Request" }, { value: "description", label: "Deskripsi" }, { value: "status", label: "Status" }, { value: "picName", label: "Requester" }, { value: "selectedVendor", label: "Vendor terpilih" }, { value: "poNumber", label: "Nomor PO" }, { value: "poDate", label: "Tanggal PO" }, { value: "poAmountIncl", label: "Nilai PO incl. PPN" }, { value: "efficiency", label: "Efisiensi" }, { value: "budget", label: "Budget" },
 ]
 
 export default function ProcurementApp({ auth }: { auth: AuthenticatedProcurement }) {
@@ -252,13 +252,11 @@ export default function ProcurementApp({ auth }: { auth: AuthenticatedProcuremen
         return
       }
     }
-    const draftYear = Number(draft.requestDate.slice(0, 4)) || currentYear
-    const nextSequence = workspace.records.filter((record) => Number(record.requestDate.slice(0, 4)) === draftYear).length + 1
     const tenderOffers = draft.procurementMethod === "Tender" ? draft.offers : []
     const winner = tenderOffers.find((offer) => offer.winner)
     const poAmountExcl = winner?.finalOffer || draft.poAmountExcl
     const initialPriceExcl = winner?.initialOffer || draft.initialPriceExcl || 0
-    const saved: ProcurementRecord = { ...draft, initialPriceExcl, offers: tenderOffers, documents: draft.documents.filter((document) => document.name || document.webViewLink), requestId: editMode === "edit" ? draft.requestId : formatRequestId(workspace.settings.requestIdPattern, draftYear, nextSequence), selectedVendor: winner?.vendor || draft.selectedVendor, poAmountExcl, poAmountIncl: poAmountExcl * 1.11, efficiency: Math.max(0, initialPriceExcl - poAmountExcl) * 1.11 }
+    const saved: ProcurementRecord = { ...draft, initialPriceExcl, offers: tenderOffers, documents: draft.documents.filter((document) => document.name || document.webViewLink), requestId: editMode === "edit" ? draft.requestId : "", selectedVendor: winner?.vendor || draft.selectedVendor, poAmountExcl, poAmountIncl: poAmountExcl * 1.11, efficiency: Math.max(0, initialPriceExcl - poAmountExcl) * 1.11 }
     showOperation(editMode === "edit" ? "Memperbarui pengadaan" : "Menambah pengadaan", "Menulis langsung ke master spreadsheet", 3)
     try {
       const persisted = await backendWorkspace.upsertProcurement(saved, editMode)
