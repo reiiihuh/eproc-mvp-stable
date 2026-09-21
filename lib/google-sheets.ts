@@ -1,4 +1,5 @@
 import * as XLSX from "xlsx"
+import { procurementSlaFormulas } from "./procurement-sla-formulas"
 
 import { XlsxWorkspaceAdapter } from "./procurement-data"
 import type { ProcurementPic, ProcurementRecord, ProcurementVendor, ProcurementWorkspace, TenderScorecard, WorkspaceSettings } from "./procurement-types"
@@ -165,6 +166,7 @@ export class GoogleSheetsWorkspaceAdapter {
       "Kode Budget": record.budgetCode, "Vendor Terpilih": record.selectedVendor, "Nomor PO": record.poNumber,
       "Tanggal PO": record.poDate || "", "Tanggal Memo": record.memoDate || "", "Tanggal Persetujuan Direksi": record.directorApprovalDate || "", "Tanggal Send FPC": record.fpcSentDate || "", "Tanggal Approval FPC": record.fpcApprovalDate || "", "Harga Awal Excl. PPN": Number(record.initialPriceExcl || 0), "Amount PO Excl. PPN": Number(record.poAmountExcl || 0),
       "Amount PO Incld. PPN": Number(record.poAmountIncl || 0), "Amount Efficiency incld PPN": Number(record.efficiency || 0), Currency: record.currency,
+      ...procurementSlaFormulas(context.headers, rowNumber),
     })
     await this.replaceOffers(sheetRequestId, record.procurementMethod === "Tender" ? record.offers : [])
     return { ...record, sourceRow: rowNumber }

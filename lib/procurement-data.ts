@@ -40,7 +40,11 @@ const asText = (value: unknown) => String(value ?? "").trim()
 const hasValue = (value: unknown) => value !== undefined && value !== null && asText(value) !== ""
 const normalizeHeader = (value: string) => value.toLowerCase().replace(/[^a-z0-9]+/g, "")
 const firstValue = (row: Record<string, unknown>, headers: string[]) => {
-  const normalized = new Map(Object.entries(row).map(([header, value]) => [normalizeHeader(header), value]))
+  const normalized = new Map<string, unknown>()
+  Object.entries(row).forEach(([header, value]) => {
+    const key = normalizeHeader(header)
+    if (!normalized.has(key) || (!hasValue(normalized.get(key)) && hasValue(value))) normalized.set(key, value)
+  })
   return headers.map((header) => normalized.get(normalizeHeader(header))).find(hasValue)
 }
 const firstDateValue = (row: Record<string, unknown>, headers: string[], keywords: string[]) => {
@@ -83,6 +87,13 @@ const excelDate = (value: unknown) => {
   if (!text) return ""
   const localDate = text.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})$/)
   if (localDate) return `${localDate[3]}-${localDate[2].padStart(2, "0")}-${localDate[1].padStart(2, "0")}`
+  const indonesianMonths: Record<string, number> = {
+    januari: 1, februari: 2, maret: 3, april: 4, mei: 5, juni: 6,
+    juli: 7, agustus: 8, september: 9, oktober: 10, november: 11, desember: 12,
+  }
+  const namedDate = text.toLowerCase().match(/^(\d{1,2})\s+([a-z]+)\s+(\d{4})$/)
+  const namedMonth = namedDate ? indonesianMonths[namedDate[2]] : undefined
+  if (namedDate && namedMonth) return `${namedDate[3]}-${String(namedMonth).padStart(2, "0")}-${namedDate[1].padStart(2, "0")}`
   const date = new Date(text)
   return Number.isNaN(date.getTime()) ? "" : date.toISOString().slice(0, 10)
 }
@@ -103,7 +114,14 @@ const fnv = (input: string) => {
   return (hash >>> 0).toString(36)
 }
 const rowObject = (headers: string[], row: unknown[]) =>
-  Object.fromEntries(headers.map((header, index) => [header, row[index]]))
+  headers.reduce<Record<string, unknown>>((result, header, index) => {
+    if (!header) return result
+    const value = row[index]
+    // Sheet lama kadang memiliki header duplikat setelah migrasi. Jangan biarkan
+    // kolom duplikat yang kosong menimpa nilai pada kolom operasional sebelumnya.
+    if (!(header in result) || (!hasValue(result[header]) && hasValue(value))) result[header] = value
+    return result
+  }, {})
 
 function parsePics(workbook: XLSX.WorkBook, records: ProcurementRecord[]): ProcurementPic[] {
   const sheet = workbook.Sheets["MASTER PIC"]

@@ -24,6 +24,27 @@ Salin/sinkronkan `BackendPortal.gs`, `RouterPortal.gs`, dan `ProcurementReview.g
 
 Pastikan Script Property `GOOGLE_CLIENT_ID` sama dengan Client ID yang dipakai frontend.
 
+### Rumus SLA di master database
+
+Setelah memperbarui `ProcurementReview.gs`, jalankan `backfillProcurementSlaFormulas`
+sekali dari editor Apps Script untuk mengisi kolom SLA pada record lama di seluruh
+dataset terdaftar (termasuk arsip). Fungsi ini mengganti isi kolom SLA yang dikenali
+dengan rumus, tanpa menambah atau memindahkan header. Simpan/edit pengadaan dan
+promosi request berikutnya otomatis memasang rumus pada baris terkait.
+
+Pemetaan mengikuti header SLA yang sudah ada (spasi/baris baru diabaikan):
+
+- SLA pengadaan: Tanggal Request → Tanggal Memo.
+- SLA approval memo: Tanggal Memo → Tanggal Send FPC.
+- SLA FPC: Tanggal Send FPC → Tanggal Approval FPC.
+- SLA total / sampai PO: Tanggal Request → Tanggal PO.
+
+Rumus memakai `NETWORKDAYS(awal,akhir)-NETWORKDAYS(awal,awal)` agar tanggal awal
+tidak dihitung, sama seperti dashboard. Sabtu/Minggu dikecualikan; kalender libur
+belum ditambahkan. Tanggal kosong, tidak valid, atau terbalik menghasilkan sel
+kosong; tanggal sama menghasilkan 0. Nilai berupa durasi aktual hari kerja,
+bukan selisih terhadap target 5 hari. Dashboard tetap merata-ratakan record Complete.
+
 ## 4. Konfigurasi MVP
 
 Salin `.env.example` menjadi `.env.local`, lalu isi:
