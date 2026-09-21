@@ -2,11 +2,55 @@
   // Fallback mandiri agar modul review tetap jalan saat helper BackendPortal versi lama belum ikut ter-deploy.
   function portalBody_(value) { return procurementBody_(value); }
 
+<<<<<<< HEAD
   function testProcurementReviewModule() {
     var parsed = portalBody_({ payload: { ready: true } });
     if (!parsed.ready) throw new Error("PROCUREMENT_BODY_HELPER_FAILED");
     Logger.log("Procurement Review backend siap: 2026-09-17.2");
     return true;
+=======
+function testProcurementReviewModule() {
+  var parsed = portalBody_({ payload: { ready: true } });
+  if (!parsed.ready) throw new Error("PROCUREMENT_BODY_HELPER_FAILED");
+  Logger.log("Procurement Review backend siap: 2026-09-18.2");
+  return true;
+}
+
+function tryProcurementRoute_(request) {
+  request = request || {};
+  var body = request.body && typeof request.body === "object" ? request.body : request;
+  if (body.payload && typeof body.payload === "object") body = body.payload;
+  var action = String(request.action || body.action || "").trim().toLowerCase();
+  switch (action) {
+    // Alias profil ditempatkan di modul ini agar deployment dengan RouterPortal
+    // versi lama tetap dapat mengenali action profil.
+    case "getmyprofile": return portalGetMyProfile_(body);
+    case "savemyprofile": return portalSaveMyProfile_(body);
+    case "getprocurementsession": return procurementSession_(body);
+    case "listreviewqueue": return procurementListQueue_(body);
+    case "getprocurementrequestdetail": return procurementGetDetail_(body);
+    case "startreview": case "procurement.startreview": return procurementStartReview_(body);
+    case "reviewdocument": case "procurement.reviewdocument": return procurementReviewDocument_(body);
+    case "requestclarification": case "procurement.requestrevision": return procurementRequestClarification_(body);
+    case "approverequest": case "procurement.approve": return procurementApproveRequest_(body);
+    case "rejectrequest": case "procurement.reject": return procurementRejectRequest_(body);
+    case "procurement.submitreview": return procurementSubmitReview_(body);
+    case "promotetoprocurement": case "procurement.promote": return procurementPromote_(body);
+    case "syncprocurementstatus": return procurementSyncStatus_(body);
+    case "getprocurementworkspace": return procurementGetWorkspace_(body);
+    case "listprocurementdatasets": return procurementListDatasets_(body);
+    case "procurement.preparedataset": return procurementPrepareDataset_(body);
+    case "procurement.activatedataset": return procurementActivateDataset_(body);
+    case "procurement.archivedataset": return procurementArchiveDataset_(body);
+    case "procurement.resetsandboxdataset": return procurementResetSandboxDataset_(body);
+    case "procurement.upsertrecord": return procurementUpsertRecord_(body);
+    case "procurement.deleterecords": return procurementDeleteRecords_(body);
+    case "procurement.upsertpic": return procurementUpsertPic_(body);
+    case "procurement.deletepics": return procurementDeletePics_(body);
+    case "procurement.upsertvendor": return procurementUpsertVendor_(body);
+    case "procurement.deletevendors": return procurementDeleteVendors_(body);
+    default: return null;
+>>>>>>> e0095c5e86399c8cde0df01790de7a4493f0d8ec
   }
 
   function tryProcurementRoute_(request) {
@@ -211,6 +255,7 @@
 
   function procurementEnsureDatasetRegistry_(actor) {
     var spreadsheet = getSpreadsheet_();
+<<<<<<< HEAD
     var sheet = spreadsheet.getSheetByName(PROCUREMENT_DATASET_SHEET_);
     if (!sheet) {
       sheet = spreadsheet.insertSheet(PROCUREMENT_DATASET_SHEET_);
@@ -224,6 +269,21 @@
     }
     return sheet;
   }
+=======
+    var masterName = "MASTER PENGADAAN " + year;
+    var offersName = "PENAWARAN VENDOR " + year;
+    var documentsName = "DOKUMEN PENGADAAN " + year;
+    [masterName, offersName, documentsName].forEach(function (name) { if (spreadsheet.getSheetByName(name)) throw new Error("SHEET_EXISTS: Sheet " + name + " sudah tersedia."); });
+    procurementCreateDatasetSheet_("MASTER DATABASE PENGADAAN", masterName, "Nomor Request");
+    procurementCreateDatasetSheet_("PENAWARAN VENDOR", offersName, "Request ID");
+    procurementCreateDatasetSheet_("DOKUMEN PENGADAAN", documentsName, "Request ID");
+    var now = new Date();
+    registry.appendRow([key, year, "Pengadaan " + year, masterName, offersName, documentsName, "READY", "SANDBOX", false, 0, now, now, actor.email]);
+    SpreadsheetApp.flush();
+    return procurementListDatasets_(body);
+  });
+}
+>>>>>>> e0095c5e86399c8cde0df01790de7a4493f0d8ec
 
   function procurementResolveDataset_(body) {
     var datasets = procurementDatasetRows_();
@@ -344,6 +404,7 @@
     procurementActor_(body);
     var spreadsheet = getSpreadsheet_();
     var dataset = procurementResolveDataset_(body);
+<<<<<<< HEAD
     var sheets = {};
     [[dataset.masterSheet, "MASTER DATABASE PENGADAAN"], ["MASTER PIC", "MASTER PIC"], ["VENDOR REKANAN", "VENDOR REKANAN"], [dataset.offersSheet, "PENAWARAN VENDOR"], [dataset.documentsSheet, "DOKUMEN PENGADAAN"]].forEach(function (mapping) {
       var sheet = spreadsheet.getSheetByName(mapping[0]);
@@ -550,6 +611,13 @@
   }
 
   function procurementResolveReferenceRow_(sheet, context, requestedRow, idHeader, idValue, nameHeader, nameValue) {
+=======
+    if (dataset.status === "ARCHIVED") throw new Error("DATASET_ARCHIVED: Dataset arsip hanya dapat dibaca.");
+    var sheet = getSpreadsheet_().getSheetByName(dataset.masterSheet);
+    if (!sheet) throw new Error("SHEET_NOT_FOUND: " + dataset.masterSheet + ".");
+    // Kolom opsional yang sengaja dihapus tidak dibuat lagi di ujung sheet.
+    var context = procurementMasterContext_(sheet);
+>>>>>>> e0095c5e86399c8cde0df01790de7a4493f0d8ec
     var rows = portalRowsFromSheet_(sheet, context.headers, context.headerRow);
     var id = String(idValue || "").trim();
     var name = String(nameValue || "").trim().toLowerCase();
@@ -559,8 +627,82 @@
       if (idHeader && id && String(row[idHeader] || "").trim() === id) return true;
       return name && String(row[nameHeader] || "").trim().toLowerCase() === name;
     })[0];
+<<<<<<< HEAD
     return existing ? existing.__rowNumber : 0;
   }
+=======
+    var requestedRow = Number(record.sourceRow || 0);
+    var mode = String(body.mode || "create").toLowerCase();
+    if (mode === "edit") {
+      if (!(requestedRow > context.headerRow && requestedRow <= sheet.getLastRow())) throw new Error("ROW_NOT_FOUND: Baris edit tidak valid. Refresh dashboard lalu coba lagi.");
+      var candidate = rows.filter(function (row) { return row.__rowNumber === requestedRow; })[0];
+      if (!candidate || !String(candidate["Nomor Request"] || "").trim()) throw new Error("ROW_NOT_FOUND: Data edit sudah berubah atau terhapus. Refresh dashboard lalu coba lagi.");
+      existing = candidate;
+    }
+    if (!existing && !dataset.legacy) {
+      record.requestId = procurementNextMasterId_(sheet, context.headers, context.headerRow, dataset);
+      ids = [record.requestId, record.originalRequestId].map(function (value) { return String(value || "").trim(); }).filter(Boolean);
+    }
+    var rowNumber = existing ? existing.__rowNumber : procurementNextDataRow_(sheet, context);
+    if (!existing && rowNumber > context.headerRow + 1) {
+      var source = sheet.getRange(rowNumber - 1, 1, 1, sheet.getLastColumn());
+      var destination = sheet.getRange(rowNumber, 1, 1, sheet.getLastColumn());
+      source.copyTo(destination, SpreadsheetApp.CopyPasteType.PASTE_FORMAT, false);
+      source.copyTo(destination, SpreadsheetApp.CopyPasteType.PASTE_FORMULA, false);
+    }
+    var patches = {
+      "Status": record.status,
+      "Keterangan Status": record.statusNotes,
+      "Nomor Request": record.requestId,
+      "Request ID Asli": record.originalRequestId || "",
+      "Nama": record.picName,
+      "Group/Div": record.division,
+      "Lvl Jabatan": record.position,
+      "Lokasi": record.location,
+      "Tanggal Request": record.requestDate,
+      "Bentuk": record.requestType,
+      "Alamat Email User": record.email,
+      "Item": record.itemName,
+      "Deskripsi": record.description,
+      "Qty": record.quantity,
+      "Kategori": record.category,
+      "Jenis Permintaan": record.requestKind,
+      "PeriodeAwal": record.periodStart || "",
+      "PeriodeAkhir": record.periodEnd || "",
+      "Metode Pengadaan": record.procurementMethod,
+      "Budget": record.budget,
+      "Jenis Budget": record.budgetType || "",
+      "Kode Budget": record.budgetCode,
+      "Vendor Terpilih": record.selectedVendor,
+      "Nomor PO": record.poNumber,
+      "Tanggal PO": record.poDate || "",
+      "Tanggal Memo": record.memoDate || "",
+      "Tanggal Persetujuan Direksi": record.directorApprovalDate || "",
+      "Tanggal Send FPC": record.fpcSentDate || "",
+      "Tanggal Approval FPC": record.fpcApprovalDate || "",
+      "Harga Awal Excl. PPN": Number(record.initialPriceExcl || 0),
+      "Amount PO Excl. PPN": Number(record.poAmountExcl || 0),
+      "Amount PO Incld. PPN": Number(record.poAmountIncl || 0),
+      "Amount Efficiency incld PPN": Number(record.efficiency || 0),
+      "Currency": record.currency
+    };
+    // Beberapa template lama memakai nama yang lebih spesifik untuk memo pembelian.
+    var memoHeader = procurementFirstHeader_(context.headers, ["Tanggal Memo", "Tanggal Memo Pembelian", "Tanggal Memo Izin", "Tanggal Memo Ijin", "Tanggal Memo Izin Prinsip"]);
+    if (memoHeader && memoHeader !== "Tanggal Memo") {
+      patches[memoHeader] = patches["Tanggal Memo"];
+      delete patches["Tanggal Memo"];
+    }
+    procurementWritePatches_(sheet, rowNumber, context.headers, patches);
+    ["Harga Awal Excl. PPN", "Amount PO Excl. PPN", "Amount PO Incld. PPN", "Amount Efficiency incld PPN"].forEach(function (header) {
+      var column = context.headers.indexOf(header);
+      if (column >= 0) sheet.getRange(rowNumber, column + 1).setNumberFormat("#,##0.00");
+    });
+    procurementReplaceOffers_(record, dataset);
+    SpreadsheetApp.flush();
+    return { ok: true, data: { sourceRow: rowNumber, requestId: record.requestId } };
+  });
+}
+>>>>>>> e0095c5e86399c8cde0df01790de7a4493f0d8ec
 
   function procurementCopyPreviousRowFormat_(sheet, rowNumber, headerRow) {
     if (rowNumber <= headerRow + 1 || rowNumber <= sheet.getLastRow()) return;
@@ -593,9 +735,341 @@
     rowNumbers.sort(function (a, b) { return b - a; }).forEach(function (rowNumber) { sheet.deleteRow(rowNumber); });
     SpreadsheetApp.flush();
     return { ok: true, data: { deleted: rowNumbers.length } };
+<<<<<<< HEAD
+=======
+  });
+}
+
+/** CRUD requester melalui sesi admin Apps Script, tanpa OAuth Sheets di browser. */
+function procurementUpsertPic_(body) {
+  body = procurementBody_(body);
+  return portalWithLock_(function () {
+    procurementActor_(body);
+    var pic = body.pic || {};
+    if (!String(pic.name || "").trim()) throw new Error("VALIDATION_ERROR: Nama requester wajib diisi.");
+    var sheet = getSpreadsheet_().getSheetByName("MASTER PIC");
+    if (!sheet) throw new Error("SHEET_NOT_FOUND: MASTER PIC.");
+    var context = procurementEnsureSheetHeaders_(sheet, "Nama PIC", ["PIC ID", "Group/Divisi", "Jabatan", "Lokasi", "Email", "Status"]);
+    var rowNumber = procurementResolveReferenceRow_(sheet, context, Number(pic.sourceRow || 0), "PIC ID", pic.id, "Nama PIC", pic.name);
+    if (!rowNumber) rowNumber = procurementNextSheetDataRow_(sheet, context, "Nama PIC");
+    procurementCopyPreviousRowFormat_(sheet, rowNumber, context.headerRow);
+    var id = String(pic.id || "").trim();
+    if (!id || id.indexOf("demo-") === 0) id = "PIC-" + Utilities.getUuid().slice(0, 8).toUpperCase();
+    procurementWritePatches_(sheet, rowNumber, context.headers, {
+      "PIC ID": id, "Nama PIC": pic.name, "Group/Divisi": pic.division,
+      "Jabatan": pic.position, "Lokasi": pic.location, "Email": pic.email,
+      "Status": pic.active === false ? "Tidak Aktif" : "Aktif"
+    });
+    SpreadsheetApp.flush();
+    return { ok: true, data: { id: id, sourceRow: rowNumber } };
+  });
+}
+
+function procurementDeletePics_(body) {
+  body = procurementBody_(body);
+  return portalWithLock_(function () {
+    procurementActor_(body);
+    return procurementDeleteReferences_("MASTER PIC", "Nama PIC", Array.isArray(body.pics) ? body.pics : [], "PIC ID", "id", "name");
+  });
+}
+
+/** CRUD vendor memakai backend yang sama dengan master pengadaan. */
+function procurementUpsertVendor_(body) {
+  body = procurementBody_(body);
+  return portalWithLock_(function () {
+    procurementActor_(body);
+    var vendor = body.vendor || {};
+    if (!String(vendor.name || "").trim()) throw new Error("VALIDATION_ERROR: Nama vendor wajib diisi.");
+    var sheet = getSpreadsheet_().getSheetByName("VENDOR REKANAN");
+    if (!sheet) throw new Error("SHEET_NOT_FOUND: VENDOR REKANAN.");
+    var context = procurementEnsureSheetHeaders_(sheet, "Nama Pihak Penyedia Jasa", ["Nama Bank", "Nomor Rekening"]);
+    var rowNumber = procurementResolveReferenceRow_(sheet, context, Number(vendor.sourceRow || 0), "", "", "Nama Pihak Penyedia Jasa", vendor.name);
+    if (!rowNumber) rowNumber = procurementNextSheetDataRow_(sheet, context, "Nama Pihak Penyedia Jasa");
+    procurementCopyPreviousRowFormat_(sheet, rowNumber, context.headerRow);
+    procurementWritePatches_(sheet, rowNumber, context.headers, {
+      "No": rowNumber - context.headerRow,
+      "Status Prioritas": vendor.priority,
+      "Status Kelengkapan Dokumen": vendor.documentStatus,
+      "Kesediaan Buka Rekening": vendor.bankAccountCommitment,
+      "Nama Bank": vendor.bankName,
+      "Nomor Rekening": vendor.bankAccountNumber,
+      "Nama Pihak Penyedia Jasa": vendor.name,
+      "Alamat Penyedia Jasa TI": vendor.address,
+      "Jasa Yang diberikan": vendor.services,
+      "Nama PIC 1": vendor.picName,
+      "Contact Person 1": vendor.phone,
+      "Email 1": vendor.email,
+      "Jabatan/Divisi Contact Person 1": vendor.position,
+      "Kritikal/Non Kritikal": vendor.criticality,
+      "Kategori": vendor.category,
+      "Barang/Jasa": vendor.goodsOrServices,
+      "PKS": vendor.agreementStatus,
+      "Keterangan": vendor.notes
+    });
+    SpreadsheetApp.flush();
+    return { ok: true, data: { id: "vendor-row-" + rowNumber, sourceRow: rowNumber } };
+  });
+}
+
+function procurementDeleteVendors_(body) {
+  body = procurementBody_(body);
+  return portalWithLock_(function () {
+    procurementActor_(body);
+    return procurementDeleteReferences_("VENDOR REKANAN", "Nama Pihak Penyedia Jasa", Array.isArray(body.vendors) ? body.vendors : [], "", "", "name");
+  });
+}
+
+function procurementEnsureSheetHeaders_(sheet, requiredHeader, additions) {
+  var context = procurementSheetContext_(sheet, requiredHeader);
+  additions.forEach(function (header) {
+    if (context.headers.indexOf(header) < 0) {
+      sheet.getRange(context.headerRow, sheet.getLastColumn() + 1).setValue(header);
+      context.headers.push(header);
+    }
+  });
+  return procurementSheetContext_(sheet, requiredHeader);
+}
+
+function procurementResolveReferenceRow_(sheet, context, requestedRow, idHeader, idValue, nameHeader, nameValue) {
+  var rows = portalRowsFromSheet_(sheet, context.headers, context.headerRow);
+  var id = String(idValue || "").trim();
+  var name = String(nameValue || "").trim().toLowerCase();
+  var byRow = rows.filter(function (row) { return row.__rowNumber === requestedRow; })[0];
+  if (byRow) return byRow.__rowNumber;
+  var existing = rows.filter(function (row) {
+    if (idHeader && id && String(row[idHeader] || "").trim() === id) return true;
+    return name && String(row[nameHeader] || "").trim().toLowerCase() === name;
+  })[0];
+  return existing ? existing.__rowNumber : 0;
+}
+
+function procurementCopyPreviousRowFormat_(sheet, rowNumber, headerRow) {
+  if (rowNumber <= headerRow + 1 || rowNumber <= sheet.getLastRow()) return;
+  sheet.getRange(rowNumber - 1, 1, 1, sheet.getLastColumn()).copyTo(
+    sheet.getRange(rowNumber, 1, 1, sheet.getLastColumn()),
+    SpreadsheetApp.CopyPasteType.PASTE_FORMAT,
+    false
+  );
+}
+
+function procurementDeleteReferences_(sheetName, keyHeader, items, idHeader, itemIdKey, itemNameKey) {
+  if (!items.length) throw new Error("VALIDATION_ERROR: Data yang dihapus tidak tersedia.");
+  var sheet = getSpreadsheet_().getSheetByName(sheetName);
+  if (!sheet) throw new Error("SHEET_NOT_FOUND: " + sheetName + ".");
+  var context = procurementSheetContext_(sheet, keyHeader);
+  var rows = portalRowsFromSheet_(sheet, context.headers, context.headerRow);
+  var rowNumbers = [];
+  items.forEach(function (item) {
+    var requestedRow = Number(item.sourceRow || 0);
+    var id = itemIdKey ? String(item[itemIdKey] || "").trim() : "";
+    var name = String(item[itemNameKey] || "").trim().toLowerCase();
+    var match = rows.filter(function (row) {
+      if (row.__rowNumber === requestedRow) return true;
+      if (idHeader && id && String(row[idHeader] || "").trim() === id) return true;
+      return name && String(row[keyHeader] || "").trim().toLowerCase() === name;
+    })[0];
+    if (match && rowNumbers.indexOf(match.__rowNumber) < 0) rowNumbers.push(match.__rowNumber);
+  });
+  if (!rowNumbers.length) throw new Error("ROW_NOT_FOUND: Refresh dashboard lalu coba lagi.");
+  rowNumbers.sort(function (a, b) { return b - a; }).forEach(function (rowNumber) { sheet.deleteRow(rowNumber); });
+  SpreadsheetApp.flush();
+  return { ok: true, data: { deleted: rowNumbers.length } };
+}
+
+function procurementEnsureMasterHeaders_(sheet, additions) {
+  var context = procurementMasterContext_(sheet);
+  additions.forEach(function (header) {
+    if (context.headers.indexOf(header) < 0) {
+      sheet.getRange(context.headerRow, sheet.getLastColumn() + 1).setValue(header);
+      context.headers.push(header);
+    }
+  });
+  return procurementMasterContext_(sheet);
+}
+
+function procurementNextDataRow_(sheet, context) {
+  var rows = portalRowsFromSheet_(sheet, context.headers, context.headerRow);
+  return rows.reduce(function (last, row) {
+    return row["Nomor Request"] || row["Tanggal Request"] || row.Item ? Math.max(last, row.__rowNumber) : last;
+  }, context.headerRow) + 1;
+}
+
+function procurementWritePatches_(sheet, rowNumber, headers, patches) {
+  var cells = Object.keys(patches).map(function (header) {
+    var columns = [];
+    headers.forEach(function (value, index) { if (value === header) columns.push(index); });
+    // Pada master lama, kemunculan pertama berada di blok pengadaan/Memo Pembelian.
+    return { column: columns.length ? columns[0] : -1, value: patches[header] };
+  }).filter(function (cell) { return cell.column >= 0; }).sort(function (a, b) { return a.column - b.column; });
+  var groups = [];
+  cells.forEach(function (cell) {
+    var group = groups[groups.length - 1];
+    if (!group || cell.column !== group[group.length - 1].column + 1) groups.push([cell]);
+    else group.push(cell);
+  });
+  groups.forEach(function (group) { sheet.getRange(rowNumber, group[0].column + 1, 1, group.length).setValues([group.map(function (cell) { return cell.value === undefined ? "" : cell.value; })]); });
+}
+
+function procurementFirstHeader_(headers, aliases) {
+  for (var index = 0; index < aliases.length; index++) {
+    if (headers.indexOf(aliases[index]) >= 0) return aliases[index];
+  }
+  return "";
+}
+
+function procurementReplaceOffers_(record, dataset) {
+  var sheet = getSpreadsheet_().getSheetByName((dataset || procurementResolveDataset_({})).offersSheet);
+  if (!sheet) return;
+  var context = procurementSheetContext_(sheet, "Request ID");
+  var requestId = String(record.originalRequestId || record.requestId || "").trim();
+  var rows = portalRowsFromSheet_(sheet, context.headers, context.headerRow).filter(function (row) { return String(row["Request ID"] || "").trim() === requestId; });
+  rows.forEach(function (row) { sheet.getRange(row.__rowNumber, 1, 1, sheet.getLastColumn()).clearContent(); });
+  var reusable = rows.map(function (row) { return row.__rowNumber; });
+  var nextRow = procurementNextSheetDataRow_(sheet, context, "Request ID");
+  (record.offers || []).forEach(function (offer, index) {
+    var rowNumber = reusable[index] || nextRow++;
+    procurementWritePatches_(sheet, rowNumber, context.headers, {
+      "Request ID": requestId, "Urutan (Auto)": index + 1, "Vendor": offer.vendor,
+      "Penawaran Awal": offer.initialOffer, "Penawaran Revisi/BAFO": offer.bafo,
+      "Harga Final/Nego": offer.finalOffer, "PPN %": offer.taxRate,
+      "Final Incl. PPN": Number(offer.finalOffer || 0) * (1 + Number(offer.taxRate || 0.11)),
+      "Link Penawaran/BAFO": offer.quotationLink || "", "Lolos Teknis": offer.technicalPass ? "Ya" : "Tidak",
+      "Pemenang": offer.winner ? "Ya" : "Tidak"
+    });
+  });
+}
+
+function procurementDeleteOfferRows_(ids, dataset) {
+  var sheet = getSpreadsheet_().getSheetByName((dataset || procurementResolveDataset_({})).offersSheet);
+  if (!sheet) return;
+  var context = procurementSheetContext_(sheet, "Request ID");
+  portalRowsFromSheet_(sheet, context.headers, context.headerRow).filter(function (row) { return ids.indexOf(String(row["Request ID"] || "").trim()) >= 0; }).map(function (row) { return row.__rowNumber; }).sort(function (a, b) { return b - a; }).forEach(function (rowNumber) { sheet.deleteRow(rowNumber); });
+}
+
+function procurementSheetContext_(sheet, requiredHeader) {
+  var values = sheet.getDataRange().getDisplayValues();
+  for (var rowIndex = 0; rowIndex < Math.min(values.length, 20); rowIndex++) {
+    var headers = values[rowIndex].map(function (value) { return String(value || "").trim(); });
+    if (headers.indexOf(requiredHeader) >= 0) return { headers: headers, headerRow: rowIndex + 1 };
+>>>>>>> e0095c5e86399c8cde0df01790de7a4493f0d8ec
   }
 
+<<<<<<< HEAD
   function procurementEnsureMasterHeaders_(sheet, additions) {
+=======
+function procurementNextSheetDataRow_(sheet, context, keyHeader) {
+  return portalRowsFromSheet_(sheet, context.headers, context.headerRow).reduce(function (last, row) { return row[keyHeader] ? Math.max(last, row.__rowNumber) : last; }, context.headerRow) + 1;
+}
+
+function procurementPromoteApproved_(request, actor, now, approval) {
+  if (request.MASTER_REQUEST_ID) return String(request.MASTER_REQUEST_ID);
+  var dataset = procurementResolveDataset_({});
+  var sheet = getSpreadsheet_().getSheetByName(dataset.masterSheet);
+  if (!sheet) throw new Error("SHEET_NOT_FOUND: " + dataset.masterSheet + ".");
+  var masterContext = procurementMasterContext_(sheet);
+  var headers = masterContext.headers;
+  if (headers.indexOf("Nomor Request") < 0) throw new Error("MASTER_HEADER_REQUIRED: Header Nomor Request tidak ditemukan; promotion dibatalkan tanpa mengubah master.");
+
+  // Satu nomor dipakai end-to-end: REQUEST_NUMBER portal adalah Nomor Request master.
+  var portalRequestNumber = String(request.REQUEST_NUMBER || "").trim();
+  if (!portalRequestNumber) throw new Error("REQUEST_NUMBER_REQUIRED: Nomor request portal tidak tersedia.");
+  var existing = portalRowsFromSheet_(sheet, headers, masterContext.headerRow).filter(function (row) {
+    return String(row["Nomor Request"] || "").trim() === portalRequestNumber
+      || String(row["Request ID Asli"] || "").trim() === portalRequestNumber;
+  })[0];
+  var masterId = portalRequestNumber;
+  var requestDate = procurementDateOnly_(request.SUBMITTED_AT || request.CREATED_AT || now);
+  if (!existing) {
+    var values = {
+      "Nomor Request": masterId,
+      // Kompatibilitas sheet lama; bila kolom ini sudah dihapus, nilainya diabaikan.
+      "Request ID Asli": portalRequestNumber,
+      "Nama": request.REQUESTER_NAME,
+      "Alamat Email User": request.REQUESTER_EMAIL,
+      "Group/Div": request.REQUESTER_DIVISION || "",
+      "Lvl Jabatan": request.REQUESTER_POSITION || "",
+      "Lokasi": request.REQUESTER_LOCATION || "",
+      "Tanggal Request": requestDate,
+      "Bentuk": request.REQUEST_TYPE,
+      "Jenis Permintaan": request.REQUEST_TYPE,
+      "Item": request.REQUEST_TYPE,
+      "Deskripsi": request.REQUESTER_NOTES || "",
+      "Status": "Ongoing",
+      "Keterangan Status": "Disetujui melalui Portal Procurement"
+    };
+    sheet.appendRow(headers.map(function (header) { return values[header] === undefined ? "" : values[header]; }));
+    procurementFormatMasterRequestDate_(sheet, sheet.getLastRow(), headers, requestDate);
+    SpreadsheetApp.flush();
+  } else {
+    var requestColumn = headers.indexOf("Nomor Request");
+    if (requestColumn >= 0 && String(existing["Nomor Request"] || "").trim() !== masterId) {
+      sheet.getRange(existing.__rowNumber, requestColumn + 1).setValue(masterId);
+    }
+    var existingStatus = String(existing.Status || "").trim().toUpperCase();
+    var statusColumn = headers.indexOf("Status");
+    if (statusColumn >= 0 && (!existingStatus || existingStatus === "UPCOMING")) {
+      sheet.getRange(existing.__rowNumber, statusColumn + 1).setValue("Ongoing");
+    }
+    procurementFormatMasterRequestDate_(sheet, existing.__rowNumber, headers, requestDate);
+  }
+  var updated = portalUpdateOne_(PORTAL_SHEETS_.requests, "REQUEST_ID", request.REQUEST_ID, { MASTER_REQUEST_ID: masterId, CURRENT_STATUS: "IN_PROCESS", LAST_UPDATED_AT: now, UPDATED_AT: now, UPDATED_BY: actor.email, ROW_VERSION: Number(request.ROW_VERSION || 0) + 1 });
+  Object.keys(updated).forEach(function (key) { request[key] = updated[key]; });
+  if (approval) procurementLog_(request.REQUEST_ID, "REQUEST_APPROVED", approval.oldStatus, "APPROVED_FOR_PROCESS", actor, approval.note);
+  procurementLog_(request.REQUEST_ID, "PROMOTED_TO_PROCUREMENT", "APPROVED_FOR_PROCESS", "IN_PROCESS", actor, "Dipromote otomatis ke " + masterId);
+  return masterId;
+}
+
+
+function procurementSyncStatus_(body) {
+  body = procurementBody_(body);
+  return portalWithLock_(function () {
+    var actor = procurementActor_(body);
+    var request = portalFind_(PORTAL_SHEETS_.requests, "MASTER_REQUEST_ID", body.masterRequestId)
+      || portalFind_(PORTAL_SHEETS_.requests, "REQUEST_NUMBER", body.masterRequestId);
+    if (!request) throw new Error("PORTAL_LINK_NOT_FOUND: Master Request ID tidak terhubung ke portal.");
+    var next = procurementPortalStatus_(body.status, body.poNumber, body.poUrl);
+    var poNumber = String(body.poNumber || "");
+    var poUrl = String(body.poUrl || "");
+    if (String(request.CURRENT_STATUS || "").toUpperCase() === next && String(request.PO_NUMBER || "") === poNumber && String(request.PO_URL || "") === poUrl) {
+      return { ok: true, data: { requestId: request.REQUEST_ID, status: next, unchanged: true } };
+    }
+    var now = new Date();
+    portalUpdateOne_(PORTAL_SHEETS_.requests, "REQUEST_ID", request.REQUEST_ID, { CURRENT_STATUS: next, PO_NUMBER: poNumber, PO_URL: poUrl, LAST_UPDATED_AT: now, UPDATED_AT: now, UPDATED_BY: actor.email, ROW_VERSION: Number(request.ROW_VERSION || 0) + 1 });
+    procurementLog_(request.REQUEST_ID, "STATUS_CHANGED", request.CURRENT_STATUS, next, actor, "Sinkron dari Procurement " + body.masterRequestId);
+    return { ok: true, data: { requestId: request.REQUEST_ID, status: next } };
+  });
+}
+
+/**
+ * Menyegarkan status portal dari master dalam satu kali pembacaan sheet.
+ * Dipanggil saat requester membuka daftar/detail agar perubahan langsung di
+ * spreadsheet tetap tersinkron walaupun dashboard admin sedang tidak terbuka.
+ */
+function procurementReconcilePortalResult_(result, detailMode) {
+  try {
+    if (!result || result.ok === false || !result.data) return result;
+    var requests = detailMode ? [result.data.request] : result.data.requests;
+    if (!requests || !requests.length) return result;
+    var reconciled = procurementReconcileRequestsFromMaster_(requests);
+    if (detailMode) result.data.request = reconciled[0] || result.data.request;
+    else result.data.requests = reconciled;
+  } catch (error) {
+    // Gangguan sinkron master tidak boleh membuat portal requester ikut gagal.
+    Logger.log("MASTER_STATUS_SYNC_SKIPPED: " + (error && error.message ? error.message : error));
+  }
+  return result;
+}
+
+function procurementReconcileRequestsFromMaster_(requests) {
+  var linked = requests.filter(function (request) { return request && request.MASTER_REQUEST_ID; });
+  if (!linked.length) return requests;
+  var masterById = {};
+  var linkedYears = {};
+  linked.forEach(function (request) { var match = String(request.MASTER_REQUEST_ID || "").match(/PROC-(\d{4})-/); if (match) linkedYears[match[1]] = true; });
+  procurementDatasetRows_().filter(function (dataset) { return dataset.legacy || linkedYears[String(dataset.year)] || !Object.keys(linkedYears).length; }).forEach(function (dataset) {
+    var sheet = getSpreadsheet_().getSheetByName(dataset.masterSheet);
+    if (!sheet) return;
+>>>>>>> e0095c5e86399c8cde0df01790de7a4493f0d8ec
     var context = procurementMasterContext_(sheet);
     additions.forEach(function (header) {
       if (context.headers.indexOf(header) < 0) {

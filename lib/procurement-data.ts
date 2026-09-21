@@ -33,7 +33,7 @@ const DEFAULT_SETTINGS: WorkspaceSettings = {
   driveRootFolder: "Pengadaan IT",
   sheetsSpreadsheetUrl: "",
   defaultPageSize: 10,
-  autoRefreshSeconds: 30,
+  autoRefreshSeconds: 120,
 }
 
 const asText = (value: unknown) => String(value ?? "").trim()
@@ -113,6 +113,7 @@ const fnv = (input: string) => {
   }
   return (hash >>> 0).toString(36)
 }
+<<<<<<< HEAD
 const rowObject = (headers: string[], row: unknown[]) =>
   headers.reduce<Record<string, unknown>>((result, header, index) => {
     if (!header) return result
@@ -122,6 +123,14 @@ const rowObject = (headers: string[], row: unknown[]) =>
     if (!(header in result) || (!hasValue(result[header]) && hasValue(value))) result[header] = value
     return result
   }, {})
+=======
+// Master lama memiliki beberapa nama header ganda. Kolom pertama adalah blok
+// pengadaan/Memo Pembelian; jangan biarkan blok pembayaran menimpa nilainya.
+const rowObject = (headers: string[], row: unknown[]) => headers.reduce<Record<string, unknown>>((result, header, index) => {
+  if (header && !(header in result)) result[header] = row[index]
+  return result
+}, {})
+>>>>>>> e0095c5e86399c8cde0df01790de7a4493f0d8ec
 
 function parsePics(workbook: XLSX.WorkBook, records: ProcurementRecord[]): ProcurementPic[] {
   const sheet = workbook.Sheets["MASTER PIC"]
@@ -201,10 +210,7 @@ export function formatRequestId(pattern: string, year: number, sequence: number)
     .replaceAll("{SEQ4}", String(sequence).padStart(4, "0"))
 }
 
-/**
- * Rebuilds display Request IDs in chronological order while preserving every
- * legacy number in originalRequestId for audit/reference purposes.
- */
+/** Dipertahankan untuk migrasi eksplisit; jangan dipakai saat memuat master aktif. */
 export function normalizeRequestIds(records: ProcurementRecord[], pattern: string) {
   const sequenceByYear = new Map<number, number>()
   return [...records]
@@ -414,7 +420,7 @@ export class XlsxWorkspaceAdapter implements WorkspaceAdapter {
     if (!master) throw new Error("Sheet MASTER DATABASE PENGADAAN tidak ditemukan.")
     progress?.("Memetakan master, PIC, vendor, dan dokumen")
     const records = mergeProcurementDocuments(workbook, mergeDynamicOffers(workbook, parseMaster(master)))
-    progress?.("Menormalisasi Request ID")
+    progress?.("Menyiapkan data pengadaan")
     return {
       version: 1 as const,
       importedAt: new Date().toISOString(),
@@ -423,7 +429,8 @@ export class XlsxWorkspaceAdapter implements WorkspaceAdapter {
       pics: parsePics(workbook, records),
       vendors: parseVendors(workbook),
       scorecards,
-      records: normalizeRequestIds(records, settings.requestIdPattern),
+      // Nomor request adalah identitas lintas portal dan master; jangan diubah saat dibaca.
+      records,
     }
   }
 

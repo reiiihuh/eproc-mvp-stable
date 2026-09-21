@@ -20,8 +20,8 @@ export class AppsScriptWorkspaceAdapter {
     return { ...loaded, sourceName: snapshot.title }
   }
 
-  async upsertProcurement(record: ProcurementRecord) {
-    const result = await this.repository.upsertProcurementRecord(record)
+  async upsertProcurement(record: ProcurementRecord, mode: "create" | "edit" = "create") {
+    const result = await this.repository.upsertProcurementRecord(record, mode)
     return { ...record, requestId: result.requestId || record.requestId, sourceRow: result.sourceRow }
   }
 

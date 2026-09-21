@@ -7,11 +7,13 @@ const sheetsSource = fs.readFileSync(new URL("../lib/google-sheets.ts", import.m
 const repositorySource = fs.readFileSync(new URL("../lib/portal-review-repository.ts", import.meta.url), "utf8")
 const reviewSource = fs.readFileSync(new URL("../integration/portal-apps-script/ProcurementReview.gs", import.meta.url), "utf8")
 
-test("promoted master rows preserve both PROC master id and NPR portal id", () => {
+test("portal and master preserve one request number", () => {
   assert.match(dataSource, /const requestId = asText\(item\["Nomor Request"\]\)/)
   assert.match(dataSource, /const originalRequestId = asText\(item\["Request ID Asli"\]\) \|\| requestId/)
   assert.match(sheetsSource, /const sheetRequestId = record\.requestId/)
   assert.match(sheetsSource, /"Request ID Asli": record\.originalRequestId \|\| ""/)
+  assert.match(reviewSource, /var masterId = portalRequestNumber/)
+  assert.doesNotMatch(reviewSource, /hasOriginalRequestId\s*\?\s*procurementNextMasterId_/)
 })
 
 test("failed portal status sync is queued and retried idempotently", () => {
