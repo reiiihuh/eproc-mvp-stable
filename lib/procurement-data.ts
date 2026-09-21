@@ -58,6 +58,12 @@ const firstDateValue = (row: Record<string, unknown>, headers: string[], keyword
   })
   return match?.[1]
 }
+const memoDateValue = (row: Record<string, unknown>) => {
+  const header = Object.keys(row).find((name) => normalizeHeader(name) === "tanggalmemopembelian")
+  // The purchasing memo column is authoritative, including when intentionally cleared.
+  if (header !== undefined) return row[header]
+  return firstDateValue(row, ["Tanggal Memo", "Tanggal Memo Izin", "Tanggal Memo Ijin", "Tanggal Memo Izin Prinsip", "Tanggal Memo Direksi", "Memo Date"], ["memo"])
+}
 const asNumber = (value: unknown) => {
   if (typeof value === "number" && Number.isFinite(value)) return value
   const cleaned = String(value ?? "").replace(/[^0-9,.-]/g, "")
@@ -113,24 +119,12 @@ const fnv = (input: string) => {
   }
   return (hash >>> 0).toString(36)
 }
-<<<<<<< HEAD
-const rowObject = (headers: string[], row: unknown[]) =>
-  headers.reduce<Record<string, unknown>>((result, header, index) => {
-    if (!header) return result
-    const value = row[index]
-    // Sheet lama kadang memiliki header duplikat setelah migrasi. Jangan biarkan
-    // kolom duplikat yang kosong menimpa nilai pada kolom operasional sebelumnya.
-    if (!(header in result) || (!hasValue(result[header]) && hasValue(value))) result[header] = value
-    return result
-  }, {})
-=======
 // Master lama memiliki beberapa nama header ganda. Kolom pertama adalah blok
 // pengadaan/Memo Pembelian; jangan biarkan blok pembayaran menimpa nilainya.
 const rowObject = (headers: string[], row: unknown[]) => headers.reduce<Record<string, unknown>>((result, header, index) => {
   if (header && !(header in result)) result[header] = row[index]
   return result
 }, {})
->>>>>>> e0095c5e86399c8cde0df01790de7a4493f0d8ec
 
 function parsePics(workbook: XLSX.WorkBook, records: ProcurementRecord[]): ProcurementPic[] {
   const sheet = workbook.Sheets["MASTER PIC"]
@@ -316,7 +310,7 @@ function parseMaster(sheet: XLSX.WorkSheet) {
       selectedVendor: asText(item["Vendor Terpilih"]),
       poNumber: asText(item["Nomor PO"]),
       poDate: excelDate(item["Tanggal PO"]),
-      memoDate: excelDate(firstDateValue(item, ["Tanggal Memo", "Tanggal Memo Izin", "Tanggal Memo Ijin", "Tanggal Memo Izin Prinsip", "Tanggal Memo Direksi", "Memo Date"], ["memo"])),
+      memoDate: excelDate(memoDateValue(item)),
       directorApprovalDate: excelDate(firstDateValue(item, ["Tanggal Persetujuan Direksi", "Tanggal Approval Direksi", "Approval Memo Direksi", "Direksi Approval Date"], ["direksi"])),
       fpcSentDate: excelDate(firstDateValue(item, ["Tanggal Send FPC", "Tanggal Kirim FPC", "Send FPC", "FPC Sent Date"], ["fpc", "kirim"])
         ?? firstDateValue(item, ["Tanggal Send FPC", "Send FPC", "FPC Sent Date"], ["fpc", "send"])),

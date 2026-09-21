@@ -149,7 +149,9 @@ export class GoogleSheetsWorkspaceAdapter {
     await this.ensureHeader(context, SHEETS.procurements, "Jenis Budget")
     await this.ensureHeader(context, SHEETS.procurements, "Harga Awal Excl. PPN")
     await this.ensureHeader(context, SHEETS.procurements, "Request ID Asli")
-    await this.ensureHeader(context, SHEETS.procurements, "Tanggal Memo")
+    const memoHeader = ["Tanggal Memo Pembelian", "Tanggal Memo", "Tanggal Memo Izin", "Tanggal Memo Ijin", "Tanggal Memo Izin Prinsip", "Tanggal Memo Direksi", "Memo Date"]
+      .map((alias) => context.headers.find((header) => header.replace(/\s+/g, " ").trim().toLowerCase() === alias.toLowerCase())).find(Boolean) || "Tanggal Memo"
+    await this.ensureHeader(context, SHEETS.procurements, memoHeader)
     await this.ensureHeader(context, SHEETS.procurements, "Tanggal Persetujuan Direksi")
     await this.ensureHeader(context, SHEETS.procurements, "Tanggal Send FPC")
     await this.ensureHeader(context, SHEETS.procurements, "Tanggal Approval FPC")
@@ -164,7 +166,7 @@ export class GoogleSheetsWorkspaceAdapter {
       Kategori: record.category, "Jenis Permintaan": record.requestKind, PeriodeAwal: record.periodStart || "",
       PeriodeAkhir: record.periodEnd || "", "Metode Pengadaan": record.procurementMethod, Budget: record.budget, "Jenis Budget": record.budgetType || "",
       "Kode Budget": record.budgetCode, "Vendor Terpilih": record.selectedVendor, "Nomor PO": record.poNumber,
-      "Tanggal PO": record.poDate || "", "Tanggal Memo": record.memoDate || "", "Tanggal Persetujuan Direksi": record.directorApprovalDate || "", "Tanggal Send FPC": record.fpcSentDate || "", "Tanggal Approval FPC": record.fpcApprovalDate || "", "Harga Awal Excl. PPN": Number(record.initialPriceExcl || 0), "Amount PO Excl. PPN": Number(record.poAmountExcl || 0),
+      "Tanggal PO": record.poDate || "", [memoHeader]: record.memoDate || "", "Tanggal Persetujuan Direksi": record.directorApprovalDate || "", "Tanggal Send FPC": record.fpcSentDate || "", "Tanggal Approval FPC": record.fpcApprovalDate || "", "Harga Awal Excl. PPN": Number(record.initialPriceExcl || 0), "Amount PO Excl. PPN": Number(record.poAmountExcl || 0),
       "Amount PO Incld. PPN": Number(record.poAmountIncl || 0), "Amount Efficiency incld PPN": Number(record.efficiency || 0), Currency: record.currency,
       ...procurementSlaFormulas(context.headers, rowNumber),
     })

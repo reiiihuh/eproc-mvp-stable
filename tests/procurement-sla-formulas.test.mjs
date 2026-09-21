@@ -12,6 +12,25 @@ const context = vm.createContext({})
 vm.runInContext(backend, context)
 const headers = ["Nomor Request", "Tanggal Request", "Tanggal Memo", "Tanggal Send FPC", "Tanggal Approval FPC", "Tanggal PO", "SLA Proses Pengadaan", "SLA 5 Hari Kerja\nApproval Memo", "SLA FPC 5 Hari Kerja", "SLA dari awal sampai PO Hari Kerja", "SLA tidak dikenal"]
 
+test("header produksi proses dan approval memo memakai tanggal memo pembelian", () => {
+  const production = [...headers]
+  production[2] = "Tanggal Memo\nPembelian"
+  production[6] = "SLA Proses 5 Hari Kerja"
+  production[7] = "SLA Approval Memo 5 Hari Kerja \u00a0"
+  for (const layout of [production, [...production, "Tanggal Memo"]]) {
+    const formulas = procurementSlaFormulas(layout, 3)
+    assert.deepEqual(JSON.parse(JSON.stringify(context.procurementSlaFormulas_(layout, 3))), formulas)
+    assert.equal(Object.keys(formulas).length, 4)
+    assert.ok(formulas[production[6]].includes("C3"))
+    assert.ok(formulas[production[7]].includes("C3"))
+    assert.ok(formulas[production[7]].includes("D3"))
+    if (layout.length > production.length) {
+      assert.ok(!formulas[production[6]].includes("L3"))
+      assert.ok(!formulas[production[7]].includes("L3"))
+    }
+  }
+})
+
 test("kedua backend menghasilkan rumus identik pada kolom SLA yang tersedia", () => {
   for (const layout of [headers, [...headers].reverse(), [...Array(55).fill(""), ...headers]]) {
     const formulas = procurementSlaFormulas(layout, 12)
