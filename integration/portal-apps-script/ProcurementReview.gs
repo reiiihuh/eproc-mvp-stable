@@ -346,11 +346,15 @@ function procurementGetWorkspace_(body) {
   var sheets = {};
   [[dataset.masterSheet, "MASTER DATABASE PENGADAAN"], ["MASTER PIC", "MASTER PIC"], ["VENDOR REKANAN", "VENDOR REKANAN"], [dataset.offersSheet, "PENAWARAN VENDOR"], [dataset.documentsSheet, "DOKUMEN PENGADAAN"]].forEach(function (mapping) {
     var sheet = spreadsheet.getSheetByName(mapping[0]);
+<<<<<<< HEAD
     if (sheet) sheets[mapping[1]] = sheet.getDataRange().getValues().map(function (row) {
       return row.map(function (value) {
         return value instanceof Date ? Utilities.formatDate(value, spreadsheet.getSpreadsheetTimeZone(), "yyyy-MM-dd") : value;
       });
     });
+=======
+    if (sheet) sheets[mapping[1]] = sheet.getDataRange().getValues();
+>>>>>>> 517678925e6f1ed8d3ebab8de8c38e966875116a
   });
   if (!sheets["MASTER DATABASE PENGADAAN"]) throw new Error("SHEET_NOT_FOUND: MASTER DATABASE PENGADAAN.");
   delete dataset.__rowNumber;
@@ -976,6 +980,7 @@ function procurementNextMasterId_(sheet, headers, headerRow, dataset) {
   return "PROC-" + year + "-" + String(next).padStart(4, "0");
 }
 function procurementBody_(value) { if (!value || typeof value !== "object") return {}; if (value.body && typeof value.body === "object") return value.body; if (value.payload && typeof value.payload === "object") return value.payload; return value; }
+<<<<<<< HEAD
 
   function procurementWriteSlaFormulas_(sheet, rowNumber, headers) {
     var formulas = procurementSlaFormulas_(headers, rowNumber);
@@ -1070,4 +1075,82 @@ function procurementSlaFormulas_(headers, rowNumber) {
         patches[header] = `=IFERROR(IF(OR(${start}="",${end}="",${endDate}<${startDate}),"",NETWORKDAYS(${startDate},${endDate})-NETWORKDAYS(${startDate},${startDate})),"")`;
     });
     return patches;
+=======
+
+/** Menulis rumus SLA ke kolom yang tersedia pada master pengadaan. */
+function procurementWriteSlaFormulas_(sheet, rowNumber, headers) {
+  var formulas = procurementSlaFormulas_(headers, rowNumber);
+  Object.keys(formulas).forEach(function (header) {
+    sheet.getRange(rowNumber, headers.indexOf(header) + 1).setFormula(formulas[header]).setNumberFormat("0");
+  });
+}
+
+/** Jalankan manual sekali untuk mengisi rumus SLA pada record lama di seluruh dataset. */
+function backfillProcurementSlaFormulas() {
+  return portalWithLock_(function () {
+    var spreadsheet = getSpreadsheet_();
+    var seen = {};
+    var updated = 0;
+    procurementDatasetRows_().forEach(function (dataset) {
+      if (seen[dataset.masterSheet]) return;
+      seen[dataset.masterSheet] = true;
+      var sheet = spreadsheet.getSheetByName(dataset.masterSheet);
+      if (!sheet) throw new Error("SHEET_NOT_FOUND: " + dataset.masterSheet);
+      var context = procurementMasterContext_(sheet);
+      var count = sheet.getLastRow() - context.headerRow;
+      if (count <= 0) return;
+      var rows = sheet.getRange(context.headerRow + 1, 1, count, sheet.getLastColumn()).getValues();
+      var idColumn = context.headers.indexOf("Nomor Request");
+      var columns = Object.keys(procurementSlaFormulas_(context.headers, context.headerRow + 1));
+      columns.forEach(function (header) {
+        var range = sheet.getRange(context.headerRow + 1, context.headers.indexOf(header) + 1, count, 1);
+        var existingFormulas = range.getFormulas();
+        var values = range.getValues();
+        var formulas = rows.map(function (row, index) {
+          if (!String(row[idColumn] || "").trim()) return [existingFormulas[index][0] || values[index][0]];
+          updated++;
+          return [procurementSlaFormulas_(context.headers, context.headerRow + index + 1)[header]];
+        });
+        range.setValues(formulas).setNumberFormat("0");
+      });
+    });
+    SpreadsheetApp.flush();
+    return updated + " sel SLA sudah diisi rumus.";
+  });
+}
+
+/** Harus konsisten dengan procurementSlaFormulas di frontend. */
+function procurementSlaFormulas_(headers, rowNumber) {
+  function normalize(value) { return String(value || "").replace(/\s+/g, " ").trim().toLowerCase(); }
+  var normalized = headers.map(normalize);
+  function cell(header) {
+    var column = normalized.indexOf(normalize(header)) + 1;
+    if (!column) return "";
+    var name = "";
+    while (column) {
+      column--;
+      name = String.fromCharCode(65 + column % 26) + name;
+      column = Math.floor(column / 26);
+    }
+    return name + rowNumber;
+  }
+  var patches = {};
+  headers.forEach(function (header) {
+    var name = normalize(header);
+    if (!/^sla\b/.test(name)) return;
+    var dates;
+    if (/approval memo|persetujuan memo/.test(name)) dates = ["Tanggal Memo", "Tanggal Send FPC"];
+    else if (/fpc/.test(name)) dates = ["Tanggal Send FPC", "Tanggal Approval FPC"];
+    else if (/\bpo\b|total/.test(name)) dates = ["Tanggal Request", "Tanggal PO"];
+    else if (/pengadaan/.test(name)) dates = ["Tanggal Request", "Tanggal Memo"];
+    else return;
+    var start = cell(dates[0]);
+    var end = cell(dates[1]);
+    if (!start || !end) return;
+    var startDate = "IF(ISNUMBER(" + start + "),INT(" + start + "),DATEVALUE(" + start + "))";
+    var endDate = "IF(ISNUMBER(" + end + "),INT(" + end + "),DATEVALUE(" + end + "))";
+    patches[header] = "=IFERROR(IF(OR(" + start + "=\"\"," + end + "=\"\"," + endDate + "<" + startDate + "),\"\",NETWORKDAYS(" + startDate + "," + endDate + ")-NETWORKDAYS(" + startDate + "," + startDate + ")),\"\")";
+  });
+  return patches;
+>>>>>>> 517678925e6f1ed8d3ebab8de8c38e966875116a
 }
