@@ -113,24 +113,12 @@ const fnv = (input: string) => {
   }
   return (hash >>> 0).toString(36)
 }
-<<<<<<< HEAD
-const rowObject = (headers: string[], row: unknown[]) =>
-  headers.reduce<Record<string, unknown>>((result, header, index) => {
-    if (!header) return result
-    const value = row[index]
-    // Sheet lama kadang memiliki header duplikat setelah migrasi. Jangan biarkan
-    // kolom duplikat yang kosong menimpa nilai pada kolom operasional sebelumnya.
-    if (!(header in result) || (!hasValue(result[header]) && hasValue(value))) result[header] = value
-    return result
-  }, {})
-=======
 // Master lama memiliki beberapa nama header ganda. Kolom pertama adalah blok
 // pengadaan/Memo Pembelian; jangan biarkan blok pembayaran menimpa nilainya.
 const rowObject = (headers: string[], row: unknown[]) => headers.reduce<Record<string, unknown>>((result, header, index) => {
   if (header && !(header in result)) result[header] = row[index]
   return result
 }, {})
->>>>>>> e0095c5e86399c8cde0df01790de7a4493f0d8ec
 
 function parsePics(workbook: XLSX.WorkBook, records: ProcurementRecord[]): ProcurementPic[] {
   const sheet = workbook.Sheets["MASTER PIC"]
