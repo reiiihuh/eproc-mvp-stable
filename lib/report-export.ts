@@ -1,3 +1,4 @@
+import { formatIndonesianDate } from "./indonesian-date"
 import * as XLSX from "xlsx"
 import { jsPDF } from "jspdf"
 import autoTable from "jspdf-autotable"
@@ -16,7 +17,7 @@ const money = (value: number, currency = "IDR") => new Intl.NumberFormat("id-ID"
 const safeName = (value: string) => value.replace(/[^a-z0-9_-]+/gi, "_")
 
 export function reportRange(period: ReportPeriod, anchor: string, customStart = "", customEnd = "") {
-  if (period === "custom") return { start: customStart, end: customEnd, label: `${customStart || "awal"} s.d. ${customEnd || "akhir"}` }
+  if (period === "custom") return { start: customStart, end: customEnd, label: `${formatIndonesianDate(customStart) || "awal"} s.d. ${formatIndonesianDate(customEnd) || "akhir"}` }
   const date = parseDate(anchor)
   let start = new Date(date)
   let end = new Date(date)
@@ -36,7 +37,7 @@ export function reportRange(period: ReportPeriod, anchor: string, customStart = 
     end = new Date(date.getFullYear(), 11, 31, 12)
   }
   const labels: Record<Exclude<ReportPeriod, "custom">, string> = { daily: "Harian", weekly: "Mingguan", monthly: "Bulanan", quarterly: "Triwulanan", annual: "Tahunan" }
-  return { start: iso(start), end: iso(end), label: `${labels[period]} · ${iso(start)} s.d. ${iso(end)}` }
+  return { start: iso(start), end: iso(end), label: `${labels[period]} · ${formatIndonesianDate(iso(start))} s.d. ${formatIndonesianDate(iso(end))}` }
 }
 
 /** Filters only by request date; dashboard status filters stay a UI concern. */
@@ -58,7 +59,7 @@ function reportData(records: ProcurementRecord[]) {
 const moneyBreakdown = (totals: Record<string, number>) => Object.entries(totals).filter(([, value]) => value).map(([currency, value]) => money(value, currency)).join(" · ") || money(0)
 
 const headers = ["Tanggal", "Pengadaan", "Status", "Keterangan Status", "PIC", "Budget", "Metode", "Vendor", "Nomor PO", "Currency", "Expense Incl. PPN", "Efficiency Incl. PPN", "Saving %"]
-const rows = (records: ProcurementRecord[]) => records.map((record) => [record.requestDate, record.description || record.itemName, record.status, record.statusNotes || "—", record.picName, record.budgetType || "—", record.procurementMethod, record.selectedVendor || "—", record.poNumber || "—", record.currency, record.poAmountIncl, record.efficiency, record.initialPriceExcl ? Math.max(0, ((record.initialPriceExcl - record.poAmountExcl) / record.initialPriceExcl) * 100) : 0])
+const rows = (records: ProcurementRecord[]) => records.map((record) => [formatIndonesianDate(record.requestDate), record.description || record.itemName, record.status, record.statusNotes || "—", record.picName, record.budgetType || "—", record.procurementMethod, record.selectedVendor || "—", record.poNumber || "—", record.currency, record.poAmountIncl, record.efficiency, record.initialPriceExcl ? Math.max(0, ((record.initialPriceExcl - record.poAmountExcl) / record.initialPriceExcl) * 100) : 0])
 
 /** Produces one equivalent report model in the requested document format. */
 export async function createProcurementReport(records: ProcurementRecord[], label: string, format: ReportFormat) {

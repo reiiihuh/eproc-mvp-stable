@@ -1,3 +1,4 @@
+import { formatIndonesianDate } from "./indonesian-date.ts"
 import * as XLSX from "xlsx"
 import type {
   ProcurementRecord,
@@ -94,10 +95,11 @@ const excelDate = (value: unknown) => {
   const localDate = text.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})$/)
   if (localDate) return `${localDate[3]}-${localDate[2].padStart(2, "0")}-${localDate[1].padStart(2, "0")}`
   const indonesianMonths: Record<string, number> = {
+    jan: 1, feb: 2, mar: 3, apr: 4, jun: 6, jul: 7, agu: 8, agt: 8, sep: 9, okt: 10, nov: 11, des: 12,
     januari: 1, februari: 2, maret: 3, april: 4, mei: 5, juni: 6,
     juli: 7, agustus: 8, september: 9, oktober: 10, november: 11, desember: 12,
   }
-  const namedDate = text.toLowerCase().match(/^(\d{1,2})\s+([a-z]+)\s+(\d{4})$/)
+  const namedDate = text.toLowerCase().match(/^(\d{1,2})[\s-]+([a-z]+)[\s-]+(\d{4})$/)
   const namedMonth = namedDate ? indonesianMonths[namedDate[2]] : undefined
   if (namedDate && namedMonth) return `${namedDate[3]}-${String(namedMonth).padStart(2, "0")}-${namedDate[1].padStart(2, "0")}`
   const date = new Date(text)
@@ -436,7 +438,7 @@ export class XlsxWorkspaceAdapter implements WorkspaceAdapter {
       Status: record.status,
       "Keterangan Status": record.statusNotes,
       "Nomor Request": record.requestId,
-      "Tanggal Request": record.requestDate,
+      "Tanggal Request": formatIndonesianDate(record.requestDate),
       PIC: record.picName,
       Divisi: record.division,
       Jabatan: record.position,
@@ -450,11 +452,13 @@ export class XlsxWorkspaceAdapter implements WorkspaceAdapter {
       "Jenis Budget": record.budgetType ?? "",
       "Vendor Terpilih": record.selectedVendor,
       "Nomor PO": record.poNumber,
-      "Tanggal PO": record.poDate ?? "",
-      "Tanggal Memo": record.memoDate ?? "",
-      "Tanggal Persetujuan Direksi": record.directorApprovalDate ?? "",
-      "Tanggal Send FPC": record.fpcSentDate ?? "",
-      "Tanggal Approval FPC": record.fpcApprovalDate ?? "",
+      PeriodeAwal: formatIndonesianDate(record.periodStart),
+      PeriodeAkhir: formatIndonesianDate(record.periodEnd),
+      "Tanggal PO": formatIndonesianDate(record.poDate),
+      "Tanggal Memo": formatIndonesianDate(record.memoDate),
+      "Tanggal Persetujuan Direksi": formatIndonesianDate(record.directorApprovalDate),
+      "Tanggal Send FPC": formatIndonesianDate(record.fpcSentDate),
+      "Tanggal Approval FPC": formatIndonesianDate(record.fpcApprovalDate),
       "PO Excl. PPN": record.poAmountExcl,
       "Harga Awal Excl. PPN": record.initialPriceExcl ?? 0,
       "PO Incl. PPN": record.poAmountIncl,

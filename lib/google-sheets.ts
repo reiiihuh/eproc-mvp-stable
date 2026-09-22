@@ -103,6 +103,9 @@ export class GoogleSheetsWorkspaceAdapter {
   private async writeCells(title: string, rowNumber: number, headers: string[], patches: Record<string, unknown>) {
     const data = Object.entries(patches).flatMap(([header, value]) => {
       const columnIndex = headers.indexOf(header)
+      if (/^(tanggal\b|periode\s*(awal|akhir)$)/i.test(header) && typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
+        value = (Date.parse(`${value}T00:00:00Z`) - Date.UTC(1899, 11, 30)) / 86400000
+      }
       return columnIndex < 0 ? [] : [{ range: `${quoteSheet(title)}!${columnName(columnIndex)}${rowNumber}`, values: [[value ?? ""]] }]
     })
     if (!data.length) return
@@ -168,6 +171,13 @@ export class GoogleSheetsWorkspaceAdapter {
       "Amount PO Incld. PPN": Number(record.poAmountIncl || 0), "Amount Efficiency incld PPN": Number(record.efficiency || 0), Currency: record.currency,
       ...procurementSlaFormulas(context.headers, rowNumber),
     })
+    await sheetsFetch(this.token, this.baseUrl(":batchUpdate"), { method: "POST", body: JSON.stringify({ requests: [
+      { updateSpreadsheetProperties: { properties: { locale: "id_ID" }, fields: "locale" } },
+      ...context.headers.flatMap((header, index) => /^(tanggal\b|periode\s*(awal|akhir)$)/i.test(header) ? [{ repeatCell: {
+        range: { sheetId: context.sheetId, startRowIndex: rowNumber - 1, endRowIndex: rowNumber, startColumnIndex: index, endColumnIndex: index + 1 },
+        cell: { userEnteredFormat: { numberFormat: { type: "DATE", pattern: "dd-mmm-yyyy" } } }, fields: "userEnteredFormat.numberFormat",
+      } }] : []),
+    ] }) })
     await this.replaceOffers(sheetRequestId, record.procurementMethod === "Tender" ? record.offers : [])
     return { ...record, sourceRow: rowNumber }
   }

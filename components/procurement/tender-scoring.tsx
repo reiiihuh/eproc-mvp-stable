@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
+import { DateInput } from "@/components/ui/date-input"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -118,7 +119,7 @@ export function TenderScoring({ scorecards, onChange }: { scorecards: TenderScor
       <CardHeader className="border-b border-slate-100"><CardTitle className="font-display text-lg">Identitas & metode penilaian</CardTitle><CardDescription>Parameter ini akan tercantum di PDF dan spreadsheet untuk kebutuhan audit.</CardDescription></CardHeader>
       <CardContent className="grid gap-4 pt-5 md:grid-cols-2 xl:grid-cols-4">
         <Field label="Nama project tender *" className="md:col-span-2"><Input value={active.projectName} onChange={(event) => updateScorecard({ projectName: event.target.value })} placeholder="Contoh: Annual Penetration Testing 2026" /></Field>
-        <Field label="Tanggal scoring"><Input type="date" value={active.scoringDate} onChange={(event) => updateScorecard({ scoringDate: event.target.value })} /></Field>
+        <Field label="Tanggal scoring"><DateInput aria-label="Tanggal scoring" value={active.scoringDate} onChange={(value) => updateScorecard({ scoringDate: value })} /></Field>
         <Field label="Skema nilai"><Select value={active.scheme} onValueChange={(scheme) => updateScorecard({ scheme: scheme as ScoringScheme })}><SelectTrigger className="w-full"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="normalized">Semua nilai skala 100</SelectItem><SelectItem value="weighted">Nilai sudah berbobot</SelectItem><SelectItem value="custom">Skala khusus</SelectItem></SelectContent></Select></Field>
         <div className="grid grid-cols-2 gap-3"><Field label="Bobot teknis"><Input type="number" min="0" max="100" value={active.technicalWeight} onChange={(event) => updateScorecard({ technicalWeight: Number(event.target.value) })} /></Field><Field label="Bobot komersial"><Input type="number" min="0" max="100" value={active.commercialWeight} onChange={(event) => updateScorecard({ commercialWeight: Number(event.target.value) })} /></Field></div>
         {active.scheme === "custom" && <><Field label="Skala teknis maks."><Input type="number" min="1" value={active.technicalMaxScore} onChange={(event) => updateScorecard({ technicalMaxScore: Number(event.target.value) })} /></Field><Field label="Skala komersial maks."><Input type="number" min="1" value={active.commercialMaxScore} onChange={(event) => updateScorecard({ commercialMaxScore: Number(event.target.value) })} /></Field></>}

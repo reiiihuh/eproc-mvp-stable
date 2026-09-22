@@ -1,5 +1,7 @@
 "use client"
 
+import { formatIndonesianDate } from "@/lib/indonesian-date"
+
 import { Pencil, Trash2 } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
@@ -27,11 +29,11 @@ export function ProcurementTable({ records, showRequestId = true, extended = fal
       {showRequestId && <TableCell><span className="break-all rounded-md bg-[#eaf2fb] px-2 py-1 font-mono text-xs font-semibold text-[#082f63]">{record.requestId}</span></TableCell>}
       <TableCell><p className="break-words font-medium text-slate-900">{procurementTitle(record)}</p><p className="mt-1 break-words text-xs text-slate-400">{record.category || record.itemName}</p></TableCell>
       <TableCell><Badge variant="outline" className={statusStyle[record.status]}>{record.status}</Badge>{record.statusNotes && <p className="mt-1 break-words text-xs leading-4 text-slate-500">{record.statusNotes}</p>}</TableCell>
-      <TableCell className="break-words text-slate-600">{record.requestDate || "—"}</TableCell>
+      <TableCell className="break-words text-slate-600">{formatIndonesianDate(record.requestDate) || "—"}</TableCell>
       <TableCell className="break-words text-slate-600">{record.picName || "—"}</TableCell>
       {extended && <><TableCell className="break-words text-slate-600">{record.division || "—"}</TableCell><TableCell className="break-words text-slate-600">{record.procurementMethod || "—"}</TableCell><TableCell className="break-words font-medium text-slate-700">{record.selectedVendor || "—"}</TableCell></>}
       <TableCell className="break-all font-mono text-xs">{record.poNumber || "—"}</TableCell>
-      {extended && <TableCell className="break-words text-slate-600">{record.poDate || "—"}</TableCell>}
+      {extended && <TableCell className="break-words text-slate-600">{formatIndonesianDate(record.poDate) || "—"}</TableCell>}
       <TableCell className="break-words text-right font-medium">{record.poAmountIncl ? money(record.poAmountIncl, record.currency) : "—"}</TableCell>
       <TableCell className="break-words pr-5 text-right font-medium text-emerald-700">{record.efficiency ? money(record.efficiency, record.currency) : "—"}</TableCell>
     </TableRow>) : <TableRow><TableCell colSpan={columnCount} className="h-32 text-center text-slate-400">Tidak ada data yang sesuai.</TableCell></TableRow>}</TableBody>

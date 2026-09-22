@@ -24,6 +24,46 @@ Salin/sinkronkan `BackendPortal.gs`, `RouterPortal.gs`, dan `ProcurementReview.g
 
 Pastikan Script Property `GOOGLE_CLIENT_ID` sama dengan Client ID yang dipakai frontend.
 
+Untuk pembaruan memo/nomor request, simpan kode lalu perbarui **deployment yang
+URL `/exec`-nya digunakan aplikasi**: kelola deployment, edit deployment tersebut,
+pilih versi baru, lalu terapkan. Menyimpan kode editor saja tidak memperbarui versi
+yang dipanggil aplikasi. Jika membuat deployment baru, URL konfigurasi aplikasi
+juga harus diperbarui. Proxy mendahulukan `APPS_SCRIPT_URL`, lalu memakai
+`NEXT_PUBLIC_APPS_SCRIPT_URL` jika variabel pertama kosong.
+
+Frontend terbaru memeriksa `masterWriteContract` dari `getProcurementSession`
+sebelum setiap penyimpanan pengadaan. Backend harus mengembalikan
+`nomor-request-memo-pembelian-v1`. Backend lama ditolak sebelum record dikirim.
+Frontend hosting juga perlu di-deploy ulang agar pemeriksaan ini aktif.
+
+Jika kolom `Tanggal Memo` sudah terlanjur terisi, jalankan
+`migrateMemoToPembelian()` dari editor setelah memperbarui backend. Fungsi membuat
+backup sebelum memindahkan nilai ke `Tanggal Memo Pembelian`, termasuk menimpa
+nilai tujuan yang berbeda, lalu mengosongkan sumber dan memperbarui SLA. Periksa
+hasil sebelum menghapus kolom sumber yang kosong. Kolom `Request ID Asli` lama
+masih bisa diperlukan untuk relasi historis; kode baru tidak membuat atau mengisinya.
+
+### Format tanggal Indonesia
+
+Frontend memakai `dd-MMM-yyyy`, misalnya `17-Sep-2026`, termasuk form kalender,
+tabel, dan ekspor laporan. Nama bulan menggunakan bahasa Indonesia (`Mei`, `Agu`,
+`Okt`, `Des`). Nilai internal/API tetap ISO agar filter dan SLA konsisten.
+
+Setelah menyalin seluruh `ProcurementReview.gs` terbaru, jalankan
+`normalizeProcurementDates` sekali di editor Apps Script. Fungsi ini memvalidasi
+tanggal lama sebelum menulis, mengonversi teks tanggal ke nilai tanggal asli,
+mempertahankan formula dan sel kosong, serta memformat seluruh kolom tanggal dan
+periode pada semua master dataset, termasuk arsip. Tanggal tidak valid membatalkan
+proses validasi dan harus diperbaiki sebelum dijalankan ulang.
+
+Spreadsheet menggunakan locale `id_ID` agar nama bulan Indonesia konsisten;
+locale ini juga memengaruhi tampilan angka pada spreadsheet. Tanggal diproses
+mengikuti zona waktu spreadsheet. Penyimpanan baru otomatis memakai format
+`dd-mmm-yyyy`. Perbarui deployment `/exec` yang digunakan aplikasi dan deploy ulang
+frontend untuk mengaktifkan perubahan di aplikasi online.
+
+Referensi: [format tanggal Google Sheets](https://developers.google.com/workspace/sheets/api/guides/formats).
+
 ### Rumus SLA di master database
 
 Setelah memperbarui `ProcurementReview.gs`, jalankan `backfillProcurementSlaFormulas`

@@ -1,3 +1,4 @@
+import { formatIndonesianDate, formatIndonesianDateTime } from "./indonesian-date.ts"
 import * as XLSX from "xlsx"
 import { jsPDF } from "jspdf"
 import autoTable from "jspdf-autotable"
@@ -98,7 +99,7 @@ export function exportScorecardXlsx(scorecard: TenderScorecard) {
   rows[1][1] = scorecard.projectName
   // Request ID dan evaluator disembunyikan sementara dari seluruh hasil export.
   rows[3][0] = "Tanggal Scoring"
-  rows[3][1] = scorecard.scoringDate
+  rows[3][1] = formatIndonesianDate(scorecard.scoringDate)
 
   rows[1][20] = "PARAMETER"
   rows[2][20] = "Skema"
@@ -190,7 +191,7 @@ export function exportScorecardDocx(scorecard: TenderScorecard) {
   return createDocx(
     `Scoring Tender · ${scorecard.projectName || "Project"}`,
     [
-      `Tanggal scoring: ${scorecard.scoringDate || "—"}`,
+      `Tanggal scoring: ${formatIndonesianDate(scorecard.scoringDate) || "—"}`,
       `Bobot teknis ${scorecard.technicalWeight}% · komersial ${scorecard.commercialWeight}%`,
       `Rumus komersial: ${formulas.commercial}`,
       `Rumus final: ${formulas.final}`,
@@ -206,7 +207,7 @@ export async function exportScorecardPdf(scorecard: TenderScorecard) {
   const formulas = scorecardFormulaDescription(scorecard)
   const pdf = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" })
   const money = new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 })
-  const generatedAt = new Intl.DateTimeFormat("id-ID", { dateStyle: "long", timeStyle: "short", timeZone: "Asia/Jakarta" }).format(new Date())
+  const generatedAt = formatIndonesianDateTime(new Date())
 
   pdf.setFillColor(8, 47, 99)
   pdf.rect(0, 0, 297, 30, "F")
@@ -223,7 +224,7 @@ export async function exportScorecardPdf(scorecard: TenderScorecard) {
   pdf.text(`Dicetak ${generatedAt} WIB`, 238, 12, { align: "right" })
   pdf.setTextColor(24, 36, 52)
   pdf.setFontSize(9)
-  pdf.text(`Tanggal scoring: ${scorecard.scoringDate || "-"}`, 14, 38)
+  pdf.text(`Tanggal scoring: ${formatIndonesianDate(scorecard.scoringDate) || "-"}`, 14, 38)
   pdf.text(`Bobot: Teknis ${scorecard.technicalWeight}% · Komersial ${scorecard.commercialWeight}%`, 85, 38)
   pdf.text(`Skala: Teknis ${technicalMax} · Komersial ${commercialMax} · Harga terendah ${money.format(lowestPrice)}`, 174, 38)
 

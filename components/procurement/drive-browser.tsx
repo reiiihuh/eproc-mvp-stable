@@ -1,5 +1,7 @@
 "use client"
 
+import { formatIndonesianDateTime } from "@/lib/indonesian-date"
+
 import { useCallback, useEffect, useMemo, useState } from "react"
 import {
   ChevronRight,
@@ -35,7 +37,7 @@ import {
 } from "@/lib/google-drive"
 
 const formatDate = (value?: string) => value
-  ? new Intl.DateTimeFormat("id-ID", { dateStyle: "medium", timeStyle: "short" }).format(new Date(value))
+  ? formatIndonesianDateTime(value)
   : "—"
 
 const formatSize = (value?: string) => {

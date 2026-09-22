@@ -21,6 +21,15 @@ after(async () => {
   await vite.close();
 });
 
+test("date picker renders Indonesian dates regardless of browser locale", async () => {
+  const { DateInput } = await vite.ssrLoadModule("/components/ui/date-input.tsx");
+  const html = renderToStaticMarkup(React.createElement(DateInput, { value: "2026-09-17", onChange() {}, "aria-label": "Tanggal Request" }));
+  assert.match(html, /17-Sep-2026/);
+  assert.match(html, /aria-label="Tanggal Request"/);
+  assert.match(html, /type="button"/);
+  assert.doesNotMatch(html, /type="date"/);
+});
+
 async function readCssTree(directory) {
   const entries = await readdir(directory, { withFileTypes: true });
   const contents = await Promise.all(

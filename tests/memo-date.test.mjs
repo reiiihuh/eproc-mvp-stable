@@ -7,7 +7,8 @@ import ts from "typescript"
 import * as XLSX from "xlsx"
 
 const source = await readFile(new URL("../lib/procurement-data.ts", import.meta.url), "utf8")
-const parser = vm.createContext({ exports: {}, require: createRequire(import.meta.url), Date })
+const nodeRequire = createRequire(import.meta.url)
+const parser = vm.createContext({ exports: {}, require: name => name === "./indonesian-date.ts" ? nodeRequire("../lib/indonesian-date.ts") : nodeRequire(name), Date })
 vm.runInContext(ts.transpileModule(source + "\nexport { parseMaster };", { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText, parser)
 const backendSource = await readFile(new URL("../integration/portal-apps-script/ProcurementReview.gs", import.meta.url), "utf8")
 
@@ -24,6 +25,19 @@ test("memo pembelian menjadi sumber tanggal meskipun kolom memo lain berbeda ata
 test("template dengan hanya Tanggal Memo tetap terbaca", () => {
   const sheet = XLSX.utils.aoa_to_sheet([["Nomor Request", "Item", "Tanggal Memo"], ["REQ-1", "Laptop", "2026-09-25"]])
   assert.equal(parser.exports.parseMaster(sheet)[0].memoDate, "2026-09-25")
+})
+
+test("parser menerima singkatan bulan Indonesia pada semua kolom tanggal", () => {
+  const sheet = XLSX.utils.aoa_to_sheet([
+    ["Nomor Request", "Item", "Tanggal Request", "Tanggal Memo Pembelian", "Tanggal PO", "PeriodeAwal", "PeriodeAkhir"],
+    ["REQ-1", "Laptop", "01-Mei-2026", "17-Agu-2026", "01-Okt-2026", "17-Sep-2026", "31-Des-2026"],
+  ])
+  const record = parser.exports.parseMaster(sheet)[0]
+  assert.equal(record.requestDate, "2026-05-01")
+  assert.equal(record.memoDate, "2026-08-17")
+  assert.equal(record.poDate, "2026-10-01")
+  assert.equal(record.periodStart, "2026-09-17")
+  assert.equal(record.periodEnd, "2026-12-31")
 })
 
 test("edit memo menulis kolom pembelian yang sama dengan pembacaan dan memasang ulang SLA", () => {
@@ -74,15 +88,16 @@ test("migrasi membackup, memindahkan nilai lama, mengosongkan sumber, dan aman d
     } },
   }
   backend.portalWithLock_ = fn => fn()
-  backend.getSpreadsheet_ = () => ({ getSheetByName: () => sheet })
+  backend.getSpreadsheet_ = () => ({ getSheetByName: () => sheet, getSpreadsheetTimeZone: () => "Asia/Jakarta" })
   backend.procurementDatasetRows_ = () => [{ masterSheet: "Master" }, { masterSheet: "Master" }]
   backend.procurementMasterContext_ = () => ({ headerRow: 1, headers: rows[0] })
   backend.procurementWriteSlaFormulas_ = () => events.push("sla")
-  backend.Utilities = { getUuid: () => "test-backup-id" }
+  backend.Utilities = { getUuid: () => "test-backup-id", parseDate: value => new Date(`${value}T00:00:00+07:00`) }
   backend.SpreadsheetApp = { flush() { events.push("flush") } }
   backend.Logger = { log() {} }
   assert.match(backend.migrateMemoToPembelian(), /^1 tanggal dipindahkan/)
-  assert.deepEqual(rows[1], ["REQ-1", "2026-09-25", ""])
+  assert.equal(rows[1][1].toISOString(), "2026-09-24T17:00:00.000Z")
+  assert.equal(rows[1][2], "")
   assert.deepEqual(rows[2], ["REQ-2", "2026-09-10", ""])
   assert.ok(events.indexOf("backup") < events.indexOf("write"))
   assert.ok(events.indexOf("flush") < events.indexOf("clear"))

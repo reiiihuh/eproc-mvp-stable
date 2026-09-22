@@ -1,5 +1,7 @@
 "use client"
 
+import { formatIndonesianDate } from "@/lib/indonesian-date"
+
 import { useEffect, useMemo, useState } from "react"
 import { Bell, CalendarDays, CheckCircle2, Clock3, Moon, Pin, Sun } from "lucide-react"
 
@@ -9,7 +11,6 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import type { ProcurementRecord, ProcurementStatus } from "@/lib/procurement-types"
 
-const entryDate = (value: string) => new Date(`${value}T12:00:00`)
 type NotificationSort = "priority" | "oldest" | "newest" | "name"
 
 export function NotificationCenter({ records, onOpenRecord }: { records: ProcurementRecord[]; onOpenRecord: (record: ProcurementRecord) => void }) {
@@ -52,7 +53,7 @@ export function NotificationCenter({ records, onOpenRecord }: { records: Procure
         return <div key={record.recordUid} className="group flex items-start gap-1 rounded-xl bg-white p-2 shadow-sm ring-1 ring-slate-100 transition hover:ring-blue-100">
           <button type="button" onClick={() => onOpenRecord(record)} className="flex min-w-0 flex-1 gap-3 rounded-lg p-1 text-left">
             <div className={`mt-0.5 grid size-9 shrink-0 place-items-center rounded-lg ${status === "Ongoing" ? "bg-amber-50 text-amber-600" : "bg-sky-50 text-sky-600"}`}><CalendarDays className="size-4" /></div>
-            <div className="min-w-0 flex-1"><p className="truncate text-sm font-semibold text-slate-800">{record.description || record.itemName}</p><p className="mt-1 truncate text-xs text-slate-500">{record.picName || "Tanpa PIC"}</p>{record.requestDate && <p className="mt-1 text-xs font-medium text-[#2075b8]">{new Intl.DateTimeFormat("id-ID", { day: "numeric", month: "short", year: "numeric" }).format(entryDate(record.requestDate))}</p>}</div>
+            <div className="min-w-0 flex-1"><p className="truncate text-sm font-semibold text-slate-800">{record.description || record.itemName}</p><p className="mt-1 truncate text-xs text-slate-500">{record.picName || "Tanpa PIC"}</p>{record.requestDate && <p className="mt-1 text-xs font-medium text-[#2075b8]">{formatIndonesianDate(record.requestDate)}</p>}</div>
           </button>
           <Button type="button" variant="ghost" size="icon-sm" aria-label={isPinned ? "Lepas pin urgent" : "Pin sebagai urgent"} title={isPinned ? "Lepas pin" : "Pin urgent"} onClick={() => togglePin(record.recordUid)} className={isPinned ? "text-rose-600" : "text-slate-300 group-hover:text-slate-500"}><Pin className={isPinned ? "fill-current" : ""} /></Button>
         </div>
@@ -61,7 +62,7 @@ export function NotificationCenter({ records, onOpenRecord }: { records: Procure
   }
 
   return <div className="flex items-center gap-2">
-    <div className="hidden items-center gap-2 lg:flex"><div className={`grid size-9 place-items-center rounded-xl ${period === "Malam" ? "bg-indigo-50 text-indigo-600" : "bg-amber-50 text-amber-600"}`} title={period}><PeriodIcon className="size-4" /></div><div className="text-right"><p className="text-sm font-semibold text-slate-800">{new Intl.DateTimeFormat("id-ID", { weekday: "short", day: "2-digit", month: "short", year: "numeric", timeZone: "Asia/Jakarta" }).format(now)}</p><p className="flex items-center justify-end gap-1 text-xs text-slate-500"><Clock3 className="size-3" />{new Intl.DateTimeFormat("id-ID", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Jakarta" }).format(now)} WIB · {period}</p></div></div>
+    <div className="hidden items-center gap-2 lg:flex"><div className={`grid size-9 place-items-center rounded-xl ${period === "Malam" ? "bg-indigo-50 text-indigo-600" : "bg-amber-50 text-amber-600"}`} title={period}><PeriodIcon className="size-4" /></div><div className="text-right"><p className="text-sm font-semibold text-slate-800">{formatIndonesianDate(now)}</p><p className="flex items-center justify-end gap-1 text-xs text-slate-500"><Clock3 className="size-3" />{new Intl.DateTimeFormat("id-ID", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Jakarta" }).format(now)} WIB · {period}</p></div></div>
     <Popover>
       <PopoverTrigger asChild><Button variant="outline" size="icon" className="relative border-slate-200 bg-white" aria-label="Notifikasi pengadaan"><Bell />{entries.length > 0 && <span className="absolute -right-1 -top-1 grid min-w-5 place-items-center rounded-full bg-rose-500 px-1 text-[11px] font-bold leading-5 text-white">{Math.min(entries.length, 99)}</span>}</Button></PopoverTrigger>
       <PopoverContent align="end" className="w-[min(94vw,430px)] overflow-hidden p-0 shadow-xl">
