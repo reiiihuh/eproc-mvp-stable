@@ -129,7 +129,14 @@ export class AppsScriptPortalReviewRepository implements PortalReviewRepository 
     }).finally(() => { this.workspacePromise = undefined })
     return this.workspacePromise
   }
-  upsertProcurementRecord(record: ProcurementRecord, mode: "create" | "edit" = "create") { return this.write<{ sourceRow: number; requestId?: string }>("procurement.upsertRecord", { record, mode, datasetKey: this.datasetKey }) }
+  async upsertProcurementRecord(record: ProcurementRecord, mode: "create" | "edit" = "create") {
+    // Check the actual deployment on every save, not the cached login session.
+    const session = await this.call<ProcurementSession>("getProcurementSession")
+    if (session.masterWriteContract !== "nomor-request-memo-pembelian-v1") {
+      throw new Error("Penyimpanan dibatalkan: aplikasi masih terhubung ke Apps Script versi lama. Update deployment yang URL /exec-nya dipakai aplikasi ke versi terbaru, lalu coba lagi. Data belum dikirim untuk disimpan.")
+    }
+    return this.write<{ sourceRow: number; requestId?: string }>("procurement.upsertRecord", { record, mode, datasetKey: this.datasetKey })
+  }
   async deleteProcurementRecords(records: ProcurementRecord[]) {
     await this.write<Record<string, unknown>>("procurement.deleteRecords", { datasetKey: this.datasetKey, records: records.map((record) => ({ sourceRow: record.sourceRow, requestId: record.requestId, originalRequestId: record.originalRequestId })) })
   }

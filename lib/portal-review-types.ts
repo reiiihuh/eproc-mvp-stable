@@ -6,6 +6,7 @@ export type ProcurementSession = {
   role: ProcurementRole
   picture?: string
   spreadsheetId?: string
+  masterWriteContract?: string
 }
 
 export type PortalReviewRequest = {
