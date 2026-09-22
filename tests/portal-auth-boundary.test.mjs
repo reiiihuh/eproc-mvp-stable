@@ -29,6 +29,18 @@ test("Apps Script memverifikasi role dan menjaga promotion idempotent", async ()
   assert.match(backend, /function procurementUpsertRecord_\(body\)/)
 })
 
+test("manajemen admin memakai verifikasi server dan proteksi anti-lockout", async () => {
+  const backend = await read("integration/portal-apps-script/ProcurementReview.gs")
+  const repository = await read("lib/portal-review-repository.ts")
+  assert.match(backend, /case "procurement\.upsertadmin": return procurementUpsertAdmin_\(body\)/)
+  assert.match(backend, /ADMIN_DOMAIN_FORBIDDEN/)
+  assert.match(backend, /ADMIN_SELF_PROTECTED/)
+  assert.match(backend, /LAST_ADMIN_PROTECTED/)
+  assert.match(backend, /PROCUREMENT_ADMIN_DISABLED/)
+  assert.match(repository, /upsertProcurementAdmin/)
+  assert.match(repository, /setProcurementAdminActive/)
+})
+
 test("action review selalu dirutekan melalui repository", async () => {
   const repository = await read("lib/portal-review-repository.ts")
   for (const action of ["listReviewQueue", "startReview", "reviewDocument", "requestClarification", "approveRequest", "rejectRequest", "promoteToProcurement"]) assert.match(repository, new RegExp(action))

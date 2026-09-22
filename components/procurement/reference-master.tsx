@@ -40,7 +40,7 @@ export function PicMasterView({ pics, onSave, onDelete, onDeleteMany }: { pics: 
   const allSelected = Boolean(rows.length && rows.every((pic) => selected.includes(pic.id)))
   const toggleAll = (checked: boolean) => setSelected(checked ? [...new Set([...selected, ...rows.map((pic) => pic.id)])] : selected.filter((id) => !rows.some((pic) => pic.id === id)))
 
-  return <div className="mx-auto max-w-[1400px] space-y-5 [&_table]:table-fixed [&_td]:break-words [&_td]:whitespace-normal">
+  return <div className="mx-auto max-w-[1400px] space-y-5 [&_table]:min-w-[1100px] [&_table]:table-fixed [&_td]:align-top [&_td]:break-words [&_td]:whitespace-normal">
     <TablePager total={filteredRows.length} page={Math.min(page, pageCount)} pageCount={pageCount} pageSize={pageSize} setPage={setPage} setPageSize={setPageSize} />
     <section className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-4 sm:flex-row sm:items-center"><div className="relative flex-1"><Search className="absolute left-3 top-2.5 size-4 text-slate-400" /><Input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Cari nama, divisi, jabatan, email..." className="pl-9" /></div><Button variant="outline" className="text-rose-600" disabled={!selected.length} onClick={() => setBatchConfirm(true)}><Trash2 /> Hapus {selected.length || "batch"}</Button><Button onClick={() => setDraft(blankPic())}><Plus /> Tambah Requester</Button></section>
     <p className="text-sm text-slate-500">{rows.length} requester · perubahan disimpan langsung ke MASTER PIC saat Sheets terhubung.</p>
@@ -65,7 +65,7 @@ export function VendorMasterView({ vendors, onSave, onDelete, onDeleteMany }: { 
   const allSelected = Boolean(rows.length && rows.every((vendor) => selected.includes(vendor.id)))
   const toggleAll = (checked: boolean) => setSelected(checked ? [...new Set([...selected, ...rows.map((vendor) => vendor.id)])] : selected.filter((id) => !rows.some((vendor) => vendor.id === id)))
 
-  return <div className="mx-auto max-w-[1500px] space-y-5 [&_table]:table-fixed [&_td]:break-words [&_td]:whitespace-normal">
+  return <div className="mx-auto max-w-[1500px] space-y-5 [&_table]:min-w-[1200px] [&_table]:table-fixed [&_td]:align-top [&_td]:break-words [&_td]:whitespace-normal">
     <TablePager total={filteredRows.length} page={Math.min(page, pageCount)} pageCount={pageCount} pageSize={pageSize} setPage={setPage} setPageSize={setPageSize} />
     <section className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-4 sm:flex-row sm:items-center"><div className="relative flex-1"><Search className="absolute left-3 top-2.5 size-4 text-slate-400" /><Input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Cari vendor, layanan, PIC, kategori..." className="pl-9" /></div><Button variant="outline" className="text-rose-600" disabled={!selected.length} onClick={() => setBatchConfirm(true)}><Trash2 /> Hapus {selected.length || "batch"}</Button><Button onClick={() => setDraft(blankVendor())}><Plus /> Tambah Vendor</Button></section>
     <p className="text-sm text-slate-500">{rows.length} vendor · perubahan disimpan langsung ke VENDOR REKANAN saat Sheets terhubung.</p>

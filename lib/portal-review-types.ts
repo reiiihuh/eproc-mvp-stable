@@ -9,6 +9,16 @@ export type ProcurementSession = {
   masterWriteContract?: string
 }
 
+export type ProcurementAdminAccount = {
+  email: string
+  name: string
+  active: boolean
+  lastLoginAt: string
+  createdAt: string
+  updatedAt: string
+  updatedBy: string
+}
+
 export type PortalReviewRequest = {
   requestId: string
   requestNumber: string

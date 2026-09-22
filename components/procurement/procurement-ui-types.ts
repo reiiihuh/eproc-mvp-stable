@@ -1,4 +1,4 @@
-export type ProcurementView = "dashboard" | "review" | "master" | "pics" | "vendors" | "vendor_management" | "tender" | "documents" | "settings"
+export type ProcurementView = "dashboard" | "review" | "master" | "pics" | "vendors" | "vendor_management" | "tender" | "documents" | "admins" | "settings"
 
 export type OperationState = {
   open: boolean

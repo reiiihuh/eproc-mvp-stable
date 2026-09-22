@@ -1,11 +1,12 @@
 "use client"
 
-import { useEffect, useMemo, useRef, useState } from "react"
-import { ArrowDownUp, Building2, ContactRound, FileArchive, FileCheck2, FolderOpen, LayoutDashboard, ListFilter, Plus, Search, Settings, Store, Trash2, Users } from "lucide-react"
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react"
+import { ArrowDownUp, Building2, ContactRound, FileArchive, FileCheck2, FolderOpen, LayoutDashboard, ListFilter, Plus, Search, Settings, Store, Trash2, UserCog, Users } from "lucide-react"
 import { toast } from "sonner"
 
 import { AddProcurementDialog } from "@/components/procurement/add-procurement-dialog"
-import { ProcurementSidebar, type ProcurementNavItem } from "@/components/procurement/app-sidebar"
+import { AdminManagement } from "@/components/procurement/admin-management"
+import { ProcurementSidebar, ProcurementSidebarToggle, type ProcurementNavItem } from "@/components/procurement/app-sidebar"
 import { DocumentReview } from "@/components/procurement/document-review"
 import { DriveBrowser } from "@/components/procurement/drive-browser"
 import { NotificationCenter } from "@/components/procurement/notification-center"
@@ -23,7 +24,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar"
+import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
 import { Toaster } from "@/components/ui/sonner"
 import { AppsScriptWorkspaceAdapter } from "@/lib/apps-script-workspace"
 import { downloadBlob } from "@/lib/browser-download"
@@ -290,11 +291,11 @@ export default function ProcurementApp({ auth }: { auth: AuthenticatedProcuremen
   async function deleteVendor(vendor: ProcurementVendor) { showOperation("Menghapus vendor", `Menghapus ${vendor.name} dari VENDOR REKANAN`, 3); try { await backendWorkspace.deleteVendor(vendor); await reloadWorkspace(); finishOperation(`${vendor.name} sudah dihapus`) } catch (error) { failOperation(error instanceof Error ? error.message : "Vendor gagal dihapus.") } }
   async function deleteVendors(vendors: ProcurementVendor[]) { showOperation("Menghapus vendor", `Menghapus ${vendors.length} vendor dari VENDOR REKANAN`, 3); try { await backendWorkspace.deleteVendors(vendors); await reloadWorkspace(); finishOperation(`${vendors.length} vendor sudah dihapus`) } catch (error) { failOperation(error instanceof Error ? error.message : "Batch delete vendor gagal.") } }
 
-  const navItems: ProcurementNavItem[] = [{ id: "dashboard", label: "Dashboard", icon: LayoutDashboard }, { id: "review", label: "Document Review", icon: FileCheck2, badge: reviewCount }, { id: "master", label: "Master Pengadaan", icon: FileArchive }, { id: "pics", label: "Requester", icon: ContactRound }, { id: "vendors", label: "Vendor", icon: Store }, { id: "vendor_management", label: "Vendor Management", icon: Building2 }, { id: "tender", label: "Scoring Tender", icon: Users }, { id: "documents", label: "Dokumen", icon: FolderOpen }, { id: "settings", label: "Pengaturan", icon: Settings }]
+  const navItems: ProcurementNavItem[] = [{ id: "dashboard", label: "Dashboard", icon: LayoutDashboard }, { id: "review", label: "Document Review", icon: FileCheck2, badge: reviewCount }, { id: "master", label: "Master Pengadaan", icon: FileArchive }, { id: "pics", label: "Requester", icon: ContactRound }, { id: "vendors", label: "Data Vendor", icon: Store }, { id: "vendor_management", label: "Vendor Management", icon: Building2 }, { id: "tender", label: "Scoring Tender", icon: Users }, { id: "documents", label: "Dokumen", icon: FolderOpen }, { id: "admins", label: "Admin Access", icon: UserCog }, { id: "settings", label: "Pengaturan", icon: Settings }]
 
-  return <SidebarProvider>
+  return <SidebarProvider style={{ "--sidebar-width-icon": "4rem" } as CSSProperties}>
     <ProcurementSidebar view={view} setView={setView} navItems={navItems} auth={auth} />
-    <SidebarInset className="min-w-0 bg-[#f4f8fc]"><header className="sticky top-0 z-20 flex h-17 items-center justify-between border-b border-blue-100 bg-white/92 px-4 backdrop-blur-xl md:px-7"><div className="flex min-w-0 items-center gap-3"><SidebarTrigger className="text-[#082f63]" /><div className="min-w-0"><h1 className="truncate font-display text-lg font-bold text-[#082f63] md:text-xl">{navItems.find((item) => item.id === view)?.label}</h1><p className="truncate text-xs text-slate-500">{workspace.sourceName} · {workspace.records.length} record · Apps Script live</p></div></div><NotificationCenter records={workspace.records} onOpenRecord={(record) => { setSearch(record.requestId); setMasterYearFilter("all"); setStatusFilter("all"); setView("master") }} /></header>
+    <SidebarInset className="min-w-0 bg-[#f4f8fc]"><header className="sticky top-0 z-20 flex h-17 items-center justify-between border-b border-blue-100 bg-white/92 px-4 backdrop-blur-xl md:px-7"><div className="flex min-w-0 items-center gap-3"><ProcurementSidebarToggle /><div className="min-w-0"><h1 className="truncate font-display text-lg font-bold text-[#082f63] md:text-xl">{navItems.find((item) => item.id === view)?.label}</h1><p className="truncate text-xs text-slate-500">{workspace.sourceName} · {workspace.records.length} record · Apps Script live</p></div></div><NotificationCenter records={workspace.records} onOpenRecord={(record) => { setSearch(record.requestId); setMasterYearFilter("all"); setStatusFilter("all"); setView("master") }} /></header>
       <main className="min-w-0 p-4 md:p-7">
         {view === "dashboard" && <ProcurementDashboard year={year} years={years} setYear={setYear} requestRecords={requestYearRecords} statusData={statusData} monthlyData={monthlyData} expenseDisplay={expenseDisplay} efficiencyDisplay={efficiencyDisplay} goMaster={() => setView("master")} openReport={() => setReportOpen(true)} />}
         {view === "review" && <DocumentReview repository={auth.repository} onQueueChange={setReviewCount} />}
@@ -304,6 +305,7 @@ export default function ProcurementApp({ auth }: { auth: AuthenticatedProcuremen
         {view === "vendor_management" && <VendorManagement vendors={workspace.vendors} records={workspace.records} />}
         {view === "tender" && <TenderScoring scorecards={workspace.scorecards} onChange={(scorecards) => setWorkspace((current) => ({ ...current, scorecards }))} />}
         {view === "documents" && <DriveBrowser token={driveToken} connectDrive={async () => { await googleToken().then(() => toast.success("Google Drive terhubung.")).catch((error) => toast.error(error instanceof Error ? error.message : "Google Drive gagal dihubungkan.")) }} />}
+        {view === "admins" && <AdminManagement repository={auth.repository} currentEmail={auth.session.email} />}
         {view === "settings" && <><input ref={fileInput} type="file" accept=".xlsx,.xls" className="hidden" onChange={(event) => importFile(event.target.files?.[0])} /><ProcurementSettings workspace={workspace} setWorkspace={setWorkspace} sheetConnection={sheetConnection} pageSize={masterPageSize} setPageSize={(size) => { setMasterPageSize(size); setMasterPage(1) }} exportXlsx={() => { downloadBlob(new XlsxWorkspaceAdapter().export(workspace), `Master_Pengadaan_${new Date().toISOString().slice(0, 10)}.xlsx`); toast.success("Master spreadsheet berhasil dibuat.") }} exportJson={() => downloadBlob(new Blob([JSON.stringify(workspace, null, 2)], { type: "application/json" }), `Procurement_Workspace_${new Date().toISOString().slice(0, 10)}.json`)} openReport={() => setReportOpen(true)} importXlsx={() => fileInput.current?.click()} datasets={datasets} selectedDatasetKey={selectedDatasetKey} onSelectDataset={selectDataset} onPrepareDataset={prepareDataset} onActivateDataset={activateDataset} onArchiveDataset={archiveDataset} onResetSandbox={resetSandbox} /></>}
       </main>
     </SidebarInset>
