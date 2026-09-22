@@ -912,24 +912,33 @@ function procurementPromoteApproved_(request, actor, now, approval) {
   if (!existing) {
     var values = {
       "Nomor Request": masterId,
-      "Nama": request.REQUESTER_NAME,
-      "Alamat Email User": request.REQUESTER_EMAIL,
-      "Group/Div": request.REQUESTER_DIVISION || "",
-      "Lvl Jabatan": request.REQUESTER_POSITION || "",
-      "Lokasi": request.REQUESTER_LOCATION || "",
+      // PIC procurement dikunci ke admin yang melakukan approval/promotion pertama.
+      "Nama": actor.name,
+      "Alamat Email User": actor.email,
+      "Group/Div": actor.division || "",
+      "Lvl Jabatan": actor.position || "",
+      "Lokasi": actor.location || "",
       "Tanggal Request": requestDate,
       "Bentuk": request.REQUEST_TYPE,
       "Jenis Permintaan": request.REQUEST_TYPE,
       "Item": request.REQUEST_TYPE,
       "Deskripsi": request.REQUESTER_NOTES || "",
       "Status": "Ongoing",
-      "Keterangan Status": "Disetujui melalui Portal Procurement"
+      "Keterangan Status": "Disetujui melalui Portal Procurement oleh " + actor.name
     };
     sheet.appendRow(headers.map(function (header) { return values[header] === undefined ? "" : values[header]; }));
     procurementFormatMasterRequestDate_(sheet, sheet.getLastRow(), headers, requestDate);
     procurementWriteSlaFormulas_(sheet, sheet.getLastRow(), headers);
     SpreadsheetApp.flush();
   } else {
+    // Rekonsiliasi baris lama yang belum pernah terhubung ke portal memakai approver pertama sebagai PIC.
+    procurementWritePatches_(sheet, existing.__rowNumber, headers, {
+      "Nama": actor.name,
+      "Alamat Email User": actor.email,
+      "Group/Div": actor.division || "",
+      "Lvl Jabatan": actor.position || "",
+      "Lokasi": actor.location || ""
+    });
     var requestColumn = headers.indexOf("Nomor Request");
     if (requestColumn >= 0 && String(existing["Nomor Request"] || "").trim() !== masterId) {
       sheet.getRange(existing.__rowNumber, requestColumn + 1).setValue(masterId);
@@ -1074,6 +1083,10 @@ function procurementActor_(body) {
   var user = portalFind_(PORTAL_SHEETS_.users, "EMAIL", actor.email, true);
   if (!user || !portalTrue_(user.ACTIVE) || String(user.ROLE).toUpperCase() !== "PROCUREMENT_ADMIN") throw new Error("FORBIDDEN: Akun tidak terdaftar sebagai Procurement Admin.");
   actor.role = "PROCUREMENT_ADMIN";
+  actor.name = String(user.DISPLAY_NAME || actor.name || actor.email);
+  actor.division = String(user.DIVISION || "");
+  actor.position = String(user.POSITION || "");
+  actor.location = String(user.LOCATION || "");
   // Cache singkat menghindari tokeninfo Google di setiap klik tanpa menunda revokasi terlalu lama.
   cache.put("proc-admin-" + digest, JSON.stringify(actor), 300);
   return actor;

@@ -41,6 +41,15 @@ test("manajemen admin memakai verifikasi server dan proteksi anti-lockout", asyn
   assert.match(repository, /setProcurementAdminActive/)
 })
 
+test("approver pertama menjadi PIC master procurement", async () => {
+  const backend = await read("integration/portal-apps-script/ProcurementReview.gs")
+  assert.match(backend, /if \(request\.MASTER_REQUEST_ID\) return String\(request\.MASTER_REQUEST_ID\)/)
+  assert.match(backend, /"Nama": actor\.name/)
+  assert.match(backend, /"Alamat Email User": actor\.email/)
+  assert.match(backend, /actor\.division = String\(user\.DIVISION/)
+  assert.match(backend, /Disetujui melalui Portal Procurement oleh/)
+})
+
 test("action review selalu dirutekan melalui repository", async () => {
   const repository = await read("lib/portal-review-repository.ts")
   for (const action of ["listReviewQueue", "startReview", "reviewDocument", "requestClarification", "approveRequest", "rejectRequest", "promoteToProcurement"]) assert.match(repository, new RegExp(action))
