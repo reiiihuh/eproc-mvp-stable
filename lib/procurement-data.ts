@@ -248,7 +248,6 @@ function parseMaster(sheet: XLSX.WorkSheet) {
         id: `offer-${sourceRow}-${index}`,
         vendor,
         initialOffer: asNumber(item[`Penawaran Vendor ${index} `] ?? item[`Penawaran Vendor ${index}`]),
-        bafo: asNumber(item[`Nego Harga Vendor ${index} `] ?? item[`Nego Harga Vendor ${index}`]),
         finalOffer: asNumber(item[`Nego Harga Vendor ${index} `] ?? item[`Nego Harga Vendor ${index}`]),
         taxRate: 0.11,
         technicalPass: true,
@@ -256,7 +255,7 @@ function parseMaster(sheet: XLSX.WorkSheet) {
       })
     }
     const firstOffer = offers[0]
-    const rawPoAmountExcl = item["Amount PO Excl. PPN"]
+    const rawPoAmountExcl = item["Penawaran Akhir Excl. PPN"] ?? item["Amount PO Excl. PPN"]
     const poAmountExcl = hasValue(rawPoAmountExcl) ? asNumber(rawPoAmountExcl) : firstOffer?.finalOffer ?? 0
     const rawPoAmountIncl = item["Amount PO Incld. PPN"]
     const parsedPoAmountIncl = asNumber(rawPoAmountIncl)
@@ -292,7 +291,7 @@ function parseMaster(sheet: XLSX.WorkSheet) {
       requestDate,
       status: normalizeStatus(item["Status"]),
       statusNotes: asText(item["Keterangan Status"] ?? item["Status Keterangan"]),
-      picName: asText(item["Nama"]),
+      picName: asText(item["Nama Requestor"] ?? item["Nama"]),
       division: asText(item["Group/Div"]),
       position: asText(item["Lvl Jabatan"]),
       email: asText(item["Alamat Email User"]),
@@ -305,7 +304,7 @@ function parseMaster(sheet: XLSX.WorkSheet) {
       requestKind: asText(item["Jenis Permintaan"]),
       periodStart: excelDate(item["PeriodeAwal"]),
       periodEnd: excelDate(item["PeriodeAkhir"]),
-      procurementMethod: asText(item["Metode Pengadaan"]),
+      procurementMethod: /^tender$/i.test(asText(item["Metode Pengadaan"])) ? "Pemilihan Langsung" : asText(item["Metode Pengadaan"]),
       budget: asNumber(item["Budget"]),
       budgetType: (asText(item["Jenis Budget"] ?? item["Budget Type"]).toUpperCase() || undefined) as ProcurementRecord["budgetType"],
       budgetCode: asText(item["Kode Budget"]),
@@ -319,7 +318,7 @@ function parseMaster(sheet: XLSX.WorkSheet) {
       fpcApprovalDate: excelDate(firstDateValue(item, ["Tanggal Approval FPC", "Tanggal Persetujuan FPC", "Approval FPC", "FPC Approval Date"], ["fpc", "approval"])
         ?? firstDateValue(item, ["Tanggal Persetujuan FPC"], ["fpc", "persetujuan"])),
       poAmountExcl,
-      initialPriceExcl: asNumber(item["Harga Awal Excl. PPN"] ?? item["Penawaran Awal"]),
+      initialPriceExcl: asNumber(item["Penawaran Awal Excl. PPN"] ?? item["Harga Awal Excl. PPN"] ?? item["Penawaran Awal"]),
       poAmountIncl,
       efficiency: parsedEfficiencyIncl || (parsedEfficiencyExcl ? parsedEfficiencyExcl * 1.11 : calculatedEfficiency * 1.11),
       currency,
@@ -353,8 +352,7 @@ function mergeDynamicOffers(workbook: XLSX.WorkBook, records: ProcurementRecord[
       id: `dynamic-${target.recordUid}-${index}`,
       vendor,
       initialOffer: asNumber(item["Penawaran Awal"]),
-      bafo: asNumber(item["BAFO / Penawaran Terbaik"] ?? item["Penawaran Revisi/BAFO"]),
-      finalOffer: asNumber(item["Harga Final / Nego"] ?? item["Harga Final/Nego"]),
+      finalOffer: asNumber(item["Penawaran Akhir"] ?? item["Harga Final"] ?? item["Harga Final / Nego"] ?? item["Harga Final/Nego"]),
       taxRate: rawTaxRate > 1 ? rawTaxRate / 100 : rawTaxRate || 0.11,
       technicalPass: asText(item["Lulus Teknis"] ?? item["Lolos Teknis"]).toLowerCase() !== "tidak",
       winner: asText(item["Pemenang"]).toLowerCase() === "ya",
@@ -439,7 +437,7 @@ export class XlsxWorkspaceAdapter implements WorkspaceAdapter {
       "Keterangan Status": record.statusNotes,
       "Nomor Request": record.requestId,
       "Tanggal Request": formatIndonesianDate(record.requestDate),
-      PIC: record.picName,
+      "Nama Requestor": record.picName,
       Divisi: record.division,
       Jabatan: record.position,
       Email: record.email,
@@ -459,8 +457,8 @@ export class XlsxWorkspaceAdapter implements WorkspaceAdapter {
       "Tanggal Persetujuan Direksi": formatIndonesianDate(record.directorApprovalDate),
       "Tanggal Send FPC": formatIndonesianDate(record.fpcSentDate),
       "Tanggal Approval FPC": formatIndonesianDate(record.fpcApprovalDate),
-      "PO Excl. PPN": record.poAmountExcl,
-      "Harga Awal Excl. PPN": record.initialPriceExcl ?? 0,
+      "Penawaran Akhir Excl. PPN": record.poAmountExcl,
+      "Penawaran Awal Excl. PPN": record.initialPriceExcl ?? 0,
       "PO Incl. PPN": record.poAmountIncl,
       Efisiensi: record.efficiency,
       Currency: record.currency,
@@ -472,8 +470,7 @@ export class XlsxWorkspaceAdapter implements WorkspaceAdapter {
         Urutan: index + 1,
         Vendor: offer.vendor,
         "Penawaran Awal": offer.initialOffer,
-        BAFO: offer.bafo,
-        "Harga Final": offer.finalOffer,
+        "Penawaran Akhir": offer.finalOffer,
         "PPN %": offer.taxRate,
         "Lulus Teknis": offer.technicalPass ? "Ya" : "Tidak",
         Pemenang: offer.winner ? "Ya" : "Tidak",

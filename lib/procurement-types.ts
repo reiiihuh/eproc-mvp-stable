@@ -13,7 +13,6 @@ export type TenderOffer = {
   id: string
   vendor: string
   initialOffer: number
-  bafo: number
   finalOffer: number
   taxRate: number
   technicalPass: boolean

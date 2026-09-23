@@ -1,5 +1,7 @@
 "use client"
 
+import { syncWinnerToPo } from "@/lib/procurement-offers"
+
 import { useEffect, useMemo, useRef, useState } from "react"
 import { ArrowDownUp, Building2, ContactRound, FileArchive, FileCheck2, FolderOpen, LayoutDashboard, ListFilter, Plus, Search, Settings, Store, Trash2, Users } from "lucide-react"
 import { toast } from "sonner"
@@ -38,9 +40,9 @@ const compact = new Intl.NumberFormat("id-ID", { notation: "compact", maximumFra
 const legacyDatasetFallback: ProcurementDataset = { key: "LEGACY", year: currentYear, label: "Master lama", masterSheet: "MASTER DATABASE PENGADAAN", offersSheet: "PENAWARAN VENDOR", documentsSheet: "DOKUMEN PENGADAAN", status: "ACTIVE", environment: "LEGACY", active: true, lastSequence: 0, legacy: true }
 
 const demoRecords: ProcurementRecord[] = [
-  { recordUid: "demo-001", requestId: "PROC-2026-0001", originalRequestId: "RFP/IT/001", requestDate: "2026-01-08", status: "Complete", picName: "Danny Adi Saputra", division: "IT Strategy & GRC", position: "Department Head", email: "danny@example.com", location: "Head Office", requestType: "Project", itemName: "Managed Security Monitoring", description: "Layanan monitoring keamanan 24x7.", quantity: 1, category: "Subscription", requestKind: "Renewal", procurementMethod: "Tender", budget: 700000000, budgetCode: "IT-SEC-2026", selectedVendor: "Vendor Beta", poNumber: "PO-IT-2026-0001", poDate: "2026-02-14", memoDate: "2026-01-10", directorApprovalDate: "2026-01-14", fpcSentDate: "2026-01-20", fpcApprovalDate: "2026-01-24", poAmountExcl: 623500000, poAmountIncl: 692085000, efficiency: 16500000, currency: "IDR", offers: [], documents: [] },
-  { recordUid: "demo-002", requestId: "PROC-2026-0002", requestDate: "2026-03-12", status: "Ongoing", picName: "Robby", division: "Data & Analytics", position: "Product Owner", email: "robby@example.com", location: "Head Office", requestType: "Project", itemName: "Customer Analytics Platform", description: "Pengembangan platform analitik dan integrasi data.", quantity: 1, category: "Software", requestKind: "New", procurementMethod: "Tender", budget: 2600000000, budgetCode: "IT-DNA-2026", selectedVendor: "", poNumber: "", poAmountExcl: 0, poAmountIncl: 0, efficiency: 0, currency: "IDR", offers: [], documents: [] },
-  { recordUid: "demo-003", requestId: "PROC-2026-0003", requestDate: "2026-07-03", status: "Upcoming", picName: "Santo", division: "IT Operations", position: "Section Head", email: "santo@example.com", location: "Head Office", requestType: "Renewal", itemName: "Compliance Assessment 2026", description: "Assessment tahunan sistem kritikal.", quantity: 1, category: "Jasa", requestKind: "Renewal", procurementMethod: "Tender", budget: 250000000, budgetCode: "IT-GRC-2026", selectedVendor: "", poNumber: "", poAmountExcl: 0, poAmountIncl: 0, efficiency: 0, currency: "IDR", offers: [], documents: [] },
+  { recordUid: "demo-001", requestId: "PROC-2026-0001", originalRequestId: "RFP/IT/001", requestDate: "2026-01-08", status: "Complete", picName: "Danny Adi Saputra", division: "IT Strategy & GRC", position: "Department Head", email: "danny@example.com", location: "Head Office", requestType: "Project", itemName: "Managed Security Monitoring", description: "Layanan monitoring keamanan 24x7.", quantity: 1, category: "Subscription", requestKind: "Renewal", procurementMethod: "Pemilihan Langsung", budget: 700000000, budgetCode: "IT-SEC-2026", selectedVendor: "Vendor Beta", poNumber: "PO-IT-2026-0001", poDate: "2026-02-14", memoDate: "2026-01-10", directorApprovalDate: "2026-01-14", fpcSentDate: "2026-01-20", fpcApprovalDate: "2026-01-24", poAmountExcl: 623500000, poAmountIncl: 692085000, efficiency: 16500000, currency: "IDR", offers: [], documents: [] },
+  { recordUid: "demo-002", requestId: "PROC-2026-0002", requestDate: "2026-03-12", status: "Ongoing", picName: "Robby", division: "Data & Analytics", position: "Product Owner", email: "robby@example.com", location: "Head Office", requestType: "Project", itemName: "Customer Analytics Platform", description: "Pengembangan platform analitik dan integrasi data.", quantity: 1, category: "Software", requestKind: "New", procurementMethod: "Pemilihan Langsung", budget: 2600000000, budgetCode: "IT-DNA-2026", selectedVendor: "", poNumber: "", poAmountExcl: 0, poAmountIncl: 0, efficiency: 0, currency: "IDR", offers: [], documents: [] },
+  { recordUid: "demo-003", requestId: "PROC-2026-0003", requestDate: "2026-07-03", status: "Upcoming", picName: "Santo", division: "IT Operations", position: "Section Head", email: "santo@example.com", location: "Head Office", requestType: "Renewal", itemName: "Compliance Assessment 2026", description: "Assessment tahunan sistem kritikal.", quantity: 1, category: "Jasa", requestKind: "Renewal", procurementMethod: "Pemilihan Langsung", budget: 250000000, budgetCode: "IT-GRC-2026", selectedVendor: "", poNumber: "", poAmountExcl: 0, poAmountIncl: 0, efficiency: 0, currency: "IDR", offers: [], documents: [] },
 ]
 const demoPics: ProcurementPic[] = [{ id: "demo-pic-1", name: "Danny Adi Saputra", division: "IT Strategy & GRC", position: "Department Head", email: "danny@example.com", location: "Head Office", active: true }, { id: "demo-pic-2", name: "Robby", division: "Data & Analytics", position: "Product Owner", email: "robby@example.com", location: "Head Office", active: true }, { id: "demo-pic-3", name: "Santo", division: "IT Operations", position: "Section Head", email: "santo@example.com", location: "Head Office", active: true }]
 const initialWorkspace: ProcurementWorkspace = { version: 1, importedAt: "", sourceName: "Demo workspace", settings: defaultSettings, pics: demoPics, vendors: [], scorecards: [{ id: "starter-scorecard", projectName: "", requestId: "", scoringDate: "", evaluator: "", scheme: "normalized", technicalWeight: 70, commercialWeight: 30, technicalMaxScore: 100, commercialMaxScore: 100, includeApproval: false, vendors: [{ id: "starter-vendor-1", name: "", initialPrice: 0, finalPrice: 0, technicalScore: 0, notes: "" }, { id: "starter-vendor-2", name: "", initialPrice: 0, finalPrice: 0, technicalScore: 0, notes: "" }] }], records: demoRecords }
@@ -56,7 +58,7 @@ function initialWorkspaceState(): ProcurementWorkspace {
   } catch { return initialWorkspace }
 }
 
-const emptyOffer = (): TenderOffer => ({ id: crypto.randomUUID(), vendor: "", initialOffer: 0, bafo: 0, finalOffer: 0, taxRate: 0.11, technicalPass: true, winner: false })
+const emptyOffer = (): TenderOffer => ({ id: crypto.randomUUID(), vendor: "", initialOffer: 0, finalOffer: 0, taxRate: 0.11, technicalPass: true, winner: false })
 const blankDraft = (): ProcurementRecord => ({ recordUid: crypto.randomUUID(), requestId: "", requestDate: new Date().toISOString().slice(0, 10), status: "Upcoming", picName: "", division: "", position: "", email: "", location: "Head Office", requestType: "Project", itemName: "", description: "", quantity: 1, category: "", requestKind: "", procurementMethod: "", budget: 0, budgetCode: "", selectedVendor: "", poNumber: "", poAmountExcl: 0, poAmountIncl: 0, efficiency: 0, currency: "IDR", offers: [], documents: [] })
 const procurementTitle = (record: ProcurementRecord) => record.description || record.itemName || "Tanpa deskripsi"
 const compactMoney = (value: number, currency = "IDR") => `${currency === "IDR" ? "Rp" : currency} ${compact.format(value)}`
@@ -225,7 +227,7 @@ export default function ProcurementApp({ auth }: { auth: AuthenticatedProcuremen
     } catch (error) { failOperation(error instanceof Error ? error.message : "Workbook gagal dibaca.") }
     finally { if (fileInput.current) fileInput.current.value = "" }
   }
-  function updateDraft<K extends keyof ProcurementRecord>(key: K, value: ProcurementRecord[K]) { setDraft((current) => ({ ...current, [key]: value })) }
+  function updateDraft<K extends keyof ProcurementRecord>(key: K, value: ProcurementRecord[K]) { setDraft((current) => { const next = { ...current, [key]: value }; return key === "offers" || key === "procurementMethod" ? syncWinnerToPo(next, current.offers.some((offer) => offer.winner)) : next }) }
   function selectPic(pic: ProcurementPic) { setDraft((current) => ({ ...current, picName: pic.name, division: pic.division, position: pic.position, email: pic.email, location: pic.location })) }
   function changeOffer(index: number, patch: Partial<TenderOffer>) { updateDraft("offers", draft.offers.map((offer, offerIndex) => patch.winner && offerIndex !== index ? { ...offer, winner: false } : offerIndex === index ? { ...offer, ...patch } : offer)) }
 
@@ -237,7 +239,7 @@ export default function ProcurementApp({ auth }: { auth: AuthenticatedProcuremen
   }
 
   async function saveDraft() {
-    if (!draft.itemName || !draft.requestDate || !draft.picName || !draft.procurementMethod) { toast.error("Tanggal request, PIC, nama, dan metode pengadaan wajib diisi."); return }
+    if (!draft.itemName || !draft.requestDate || !draft.picName || !draft.procurementMethod) { toast.error("Tanggal request, Requestor, nama, dan metode pengadaan wajib diisi."); return }
     const dateSequence = [
       ["Tanggal Request", draft.requestDate],
       ["Tanggal Memo", draft.memoDate],
@@ -252,11 +254,11 @@ export default function ProcurementApp({ auth }: { auth: AuthenticatedProcuremen
         return
       }
     }
-    const tenderOffers = draft.procurementMethod === "Tender" ? draft.offers : []
-    const winner = tenderOffers.find((offer) => offer.winner)
-    const poAmountExcl = winner?.finalOffer || draft.poAmountExcl
-    const initialPriceExcl = winner?.initialOffer || draft.initialPriceExcl || 0
-    const saved: ProcurementRecord = { ...draft, initialPriceExcl, offers: tenderOffers, documents: draft.documents.filter((document) => document.name || document.webViewLink), requestId: editMode === "edit" ? draft.requestId : "", selectedVendor: winner?.vendor || draft.selectedVendor, poAmountExcl, poAmountIncl: poAmountExcl * 1.11, efficiency: Math.max(0, initialPriceExcl - poAmountExcl) * 1.11 }
+    const vendorOffers = draft.procurementMethod === "Pemilihan Langsung" ? draft.offers : []
+    const winner = vendorOffers.find((offer) => offer.winner)
+    const poAmountExcl = winner?.finalOffer ?? draft.poAmountExcl
+    const initialPriceExcl = winner?.initialOffer ?? draft.initialPriceExcl ?? 0
+    const saved: ProcurementRecord = { ...draft, initialPriceExcl, offers: vendorOffers, documents: draft.documents.filter((document) => document.name || document.webViewLink), requestId: editMode === "edit" ? draft.requestId : "", selectedVendor: winner?.vendor ?? draft.selectedVendor, poAmountExcl, poAmountIncl: poAmountExcl * 1.11, efficiency: Math.max(0, initialPriceExcl - poAmountExcl) * 1.11 }
     showOperation(editMode === "edit" ? "Memperbarui pengadaan" : "Menambah pengadaan", "Menulis langsung ke master spreadsheet", 3)
     try {
       const persisted = await backendWorkspace.upsertProcurement(saved, editMode)
@@ -290,7 +292,7 @@ export default function ProcurementApp({ auth }: { auth: AuthenticatedProcuremen
   async function deleteVendor(vendor: ProcurementVendor) { showOperation("Menghapus vendor", `Menghapus ${vendor.name} dari VENDOR REKANAN`, 3); try { await backendWorkspace.deleteVendor(vendor); await reloadWorkspace(); finishOperation(`${vendor.name} sudah dihapus`) } catch (error) { failOperation(error instanceof Error ? error.message : "Vendor gagal dihapus.") } }
   async function deleteVendors(vendors: ProcurementVendor[]) { showOperation("Menghapus vendor", `Menghapus ${vendors.length} vendor dari VENDOR REKANAN`, 3); try { await backendWorkspace.deleteVendors(vendors); await reloadWorkspace(); finishOperation(`${vendors.length} vendor sudah dihapus`) } catch (error) { failOperation(error instanceof Error ? error.message : "Batch delete vendor gagal.") } }
 
-  const navItems: ProcurementNavItem[] = [{ id: "dashboard", label: "Dashboard", icon: LayoutDashboard }, { id: "review", label: "Document Review", icon: FileCheck2, badge: reviewCount }, { id: "master", label: "Master Pengadaan", icon: FileArchive }, { id: "pics", label: "Requester", icon: ContactRound }, { id: "vendors", label: "Vendor", icon: Store }, { id: "vendor_management", label: "Vendor Management", icon: Building2 }, { id: "tender", label: "Scoring Tender", icon: Users }, { id: "documents", label: "Dokumen", icon: FolderOpen }, { id: "settings", label: "Pengaturan", icon: Settings }]
+  const navItems: ProcurementNavItem[] = [{ id: "dashboard", label: "Dashboard", icon: LayoutDashboard }, { id: "review", label: "Document Review", icon: FileCheck2, badge: reviewCount }, { id: "master", label: "Master Pengadaan", icon: FileArchive }, { id: "pics", label: "Requester", icon: ContactRound }, { id: "vendors", label: "Vendor", icon: Store }, { id: "vendor_management", label: "Vendor Management", icon: Building2 }, { id: "tender", label: "Scoring Pemilihan Langsung", icon: Users }, { id: "documents", label: "Dokumen", icon: FolderOpen }, { id: "settings", label: "Pengaturan", icon: Settings }]
 
   return <SidebarProvider>
     <ProcurementSidebar view={view} setView={setView} navItems={navItems} auth={auth} />

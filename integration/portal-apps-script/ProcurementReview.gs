@@ -1,11 +1,12 @@
 /** Backend review Procurement. Semua identitas dan role berasal dari ID token terverifikasi. */
 // Fallback mandiri agar modul review tetap jalan saat helper BackendPortal versi lama belum ikut ter-deploy.
 function portalBody_(value) { return procurementBody_(value); }
+var PROCUREMENT_MASTER_WRITE_CONTRACT_ = "nomor-request-memo-pembelian-v1";
 
 function testProcurementReviewModule() {
   var parsed = portalBody_({ payload: { ready: true } });
   if (!parsed.ready) throw new Error("PROCUREMENT_BODY_HELPER_FAILED");
-  Logger.log("Procurement Review backend siap: 2026-09-18.2");
+  Logger.log("Procurement Review backend siap: " + PROCUREMENT_MASTER_WRITE_CONTRACT_);
   return true;
 }
 
@@ -63,7 +64,7 @@ function ensureProcurementPortalSchema() {
 
 function procurementSession_(body) {
   var actor = procurementActor_(body);
-  return { ok: true, data: { email: actor.email, name: actor.name, role: "PROCUREMENT_ADMIN", spreadsheetId: getSpreadsheet_().getId() } };
+  return { ok: true, data: { email: actor.email, name: actor.name, role: "PROCUREMENT_ADMIN", spreadsheetId: getSpreadsheet_().getId(), masterWriteContract: PROCUREMENT_MASTER_WRITE_CONTRACT_ } };
 }
 
 function procurementListQueue_(body) {
@@ -346,15 +347,11 @@ function procurementGetWorkspace_(body) {
   var sheets = {};
   [[dataset.masterSheet, "MASTER DATABASE PENGADAAN"], ["MASTER PIC", "MASTER PIC"], ["VENDOR REKANAN", "VENDOR REKANAN"], [dataset.offersSheet, "PENAWARAN VENDOR"], [dataset.documentsSheet, "DOKUMEN PENGADAAN"]].forEach(function (mapping) {
     var sheet = spreadsheet.getSheetByName(mapping[0]);
-<<<<<<< HEAD
     if (sheet) sheets[mapping[1]] = sheet.getDataRange().getValues().map(function (row) {
       return row.map(function (value) {
         return value instanceof Date ? Utilities.formatDate(value, spreadsheet.getSpreadsheetTimeZone(), "yyyy-MM-dd") : value;
       });
     });
-=======
-    if (sheet) sheets[mapping[1]] = sheet.getDataRange().getValues();
->>>>>>> 517678925e6f1ed8d3ebab8de8c38e966875116a
   });
   if (!sheets["MASTER DATABASE PENGADAAN"]) throw new Error("SHEET_NOT_FOUND: MASTER DATABASE PENGADAAN.");
   delete dataset.__rowNumber;
@@ -366,30 +363,30 @@ function procurementUpsertRecord_(body) {
   return portalWithLock_(function () {
     procurementActor_(body);
     var record = body.record || {};
-    if (!String(record.requestId || "").trim()) throw new Error("VALIDATION_ERROR: Nomor Request wajib diisi.");
     var dataset = procurementResolveDataset_(body);
     if (dataset.status === "ARCHIVED") throw new Error("DATASET_ARCHIVED: Dataset arsip hanya dapat dibaca.");
     var sheet = getSpreadsheet_().getSheetByName(dataset.masterSheet);
     if (!sheet) throw new Error("SHEET_NOT_FOUND: " + dataset.masterSheet + ".");
     // Kolom opsional yang sengaja dihapus tidak dibuat lagi di ujung sheet.
-    var context = procurementMasterContext_(sheet);
+    var context = procurementMigrateInputHeaders_(sheet, "Nomor Request");
+    if (/^tender$/i.test(String(record.procurementMethod || ""))) record.procurementMethod = "Pemilihan Langsung";
+    var memoHeader = procurementFirstHeader_(context.headers, ["Tanggal Memo Pembelian"]);
+    if (!memoHeader) throw new Error("MASTER_HEADER_REQUIRED: Kolom Tanggal Memo Pembelian wajib tersedia. Tidak ada kolom baru yang dibuat.");
     var rows = portalRowsFromSheet_(sheet, context.headers, context.headerRow);
-    var ids = [record.requestId, record.originalRequestId].map(function (value) { return String(value || "").trim(); }).filter(Boolean);
-    var existing = rows.filter(function (row) {
-      return ids.indexOf(String(row["Nomor Request"] || "").trim()) >= 0 || ids.indexOf(String(row["Request ID Asli"] || "").trim()) >= 0;
-    })[0];
+    var existing;
     var requestedRow = Number(record.sourceRow || 0);
     var mode = String(body.mode || "create").toLowerCase();
     if (mode === "edit") {
       if (!(requestedRow > context.headerRow && requestedRow <= sheet.getLastRow())) throw new Error("ROW_NOT_FOUND: Baris edit tidak valid. Refresh dashboard lalu coba lagi.");
       var candidate = rows.filter(function (row) { return row.__rowNumber === requestedRow; })[0];
       if (!candidate || !String(candidate["Nomor Request"] || "").trim()) throw new Error("ROW_NOT_FOUND: Data edit sudah berubah atau terhapus. Refresh dashboard lalu coba lagi.");
+      if (String(candidate["Nomor Request"]).trim() !== String(record.requestId || "").trim()) throw new Error("REQUEST_NUMBER_IMMUTABLE: Nomor Request tidak dapat diubah. Refresh data lalu coba lagi.");
       existing = candidate;
     }
-    if (!existing && !dataset.legacy) {
-      record.requestId = procurementNextMasterId_(sheet, context.headers, context.headerRow, dataset);
-      ids = [record.requestId, record.originalRequestId].map(function (value) { return String(value || "").trim(); }).filter(Boolean);
-    }
+    if (mode !== "create" && mode !== "edit") throw new Error("VALIDATION_ERROR: Mode penyimpanan tidak valid.");
+    record.requestId = existing ? String(existing["Nomor Request"]).trim() : procurementNextMasterId_(sheet, context.headers, context.headerRow, dataset);
+    // Legacy relations are read from the stored row, never edited through the form.
+    record.originalRequestId = existing ? String(existing["Request ID Asli"] || record.requestId).trim() : record.requestId;
     var rowNumber = existing ? existing.__rowNumber : procurementNextDataRow_(sheet, context);
     if (!existing && rowNumber > context.headerRow + 1) {
       var source = sheet.getRange(rowNumber - 1, 1, 1, sheet.getLastColumn());
@@ -401,8 +398,7 @@ function procurementUpsertRecord_(body) {
       "Status": record.status,
       "Keterangan Status": record.statusNotes,
       "Nomor Request": record.requestId,
-      "Request ID Asli": record.originalRequestId || "",
-      "Nama": record.picName,
+      "Nama Requestor": record.picName,
       "Group/Div": record.division,
       "Lvl Jabatan": record.position,
       "Lokasi": record.location,
@@ -423,25 +419,19 @@ function procurementUpsertRecord_(body) {
       "Vendor Terpilih": record.selectedVendor,
       "Nomor PO": record.poNumber,
       "Tanggal PO": record.poDate || "",
-      "Tanggal Memo": record.memoDate || "",
+      [memoHeader]: record.memoDate || "",
       "Tanggal Persetujuan Direksi": record.directorApprovalDate || "",
       "Tanggal Send FPC": record.fpcSentDate || "",
       "Tanggal Approval FPC": record.fpcApprovalDate || "",
-      "Harga Awal Excl. PPN": Number(record.initialPriceExcl || 0),
-      "Amount PO Excl. PPN": Number(record.poAmountExcl || 0),
+      "Penawaran Awal Excl. PPN": Number(record.initialPriceExcl || 0),
+      "Penawaran Akhir Excl. PPN": Number(record.poAmountExcl || 0),
       "Amount PO Incld. PPN": Number(record.poAmountIncl || 0),
       "Amount Efficiency incld PPN": Number(record.efficiency || 0),
       "Currency": record.currency
     };
-    // Beberapa template lama memakai nama yang lebih spesifik untuk memo pembelian.
-    var memoHeader = procurementFirstHeader_(context.headers, ["Tanggal Memo Pembelian", "Tanggal Memo", "Tanggal Memo Izin", "Tanggal Memo Ijin", "Tanggal Memo Izin Prinsip", "Tanggal Memo Direksi", "Memo Date"]);
-    if (memoHeader && memoHeader !== "Tanggal Memo") {
-      patches[memoHeader] = patches["Tanggal Memo"];
-      delete patches["Tanggal Memo"];
-    }
     procurementWritePatches_(sheet, rowNumber, context.headers, patches);
     procurementWriteSlaFormulas_(sheet, rowNumber, context.headers);
-    ["Harga Awal Excl. PPN", "Amount PO Excl. PPN", "Amount PO Incld. PPN", "Amount Efficiency incld PPN"].forEach(function (header) {
+    ["Penawaran Awal Excl. PPN", "Penawaran Akhir Excl. PPN", "Amount PO Incld. PPN", "Amount Efficiency incld PPN"].forEach(function (header) {
       var column = context.headers.indexOf(header);
       if (column >= 0) sheet.getRange(rowNumber, column + 1).setNumberFormat("#,##0.00");
     });
@@ -631,11 +621,18 @@ function procurementNextDataRow_(sheet, context) {
 }
 
 function procurementWritePatches_(sheet, rowNumber, headers, patches) {
+  // Parse dates before writing any cells, so an invalid date cannot partially save a row.
+  var dateColumns = [];
   var cells = Object.keys(patches).map(function (header) {
     var columns = [];
     headers.forEach(function (value, index) { if (value === header) columns.push(index); });
     // Pada master lama, kemunculan pertama berada di blok pengadaan/Memo Pembelian.
-    return { column: columns.length ? columns[0] : -1, value: patches[header] };
+    var value = patches[header];
+    if (columns.length && procurementIsDateHeader_(header)) {
+      value = procurementParseCalendarDate_(value);
+      dateColumns.push(columns[0]);
+    }
+    return { column: columns.length ? columns[0] : -1, value: value };
   }).filter(function (cell) { return cell.column >= 0; }).sort(function (a, b) { return a.column - b.column; });
   var groups = [];
   cells.forEach(function (cell) {
@@ -644,6 +641,122 @@ function procurementWritePatches_(sheet, rowNumber, headers, patches) {
     else group.push(cell);
   });
   groups.forEach(function (group) { sheet.getRange(rowNumber, group[0].column + 1, 1, group.length).setValues([group.map(function (cell) { return cell.value === undefined ? "" : cell.value; })]); });
+  if (dateColumns.length) {
+    procurementUseIndonesianLocale_();
+    dateColumns.forEach(function (column) { sheet.getRange(rowNumber, column + 1).setNumberFormat("dd-mmm-yyyy"); });
+  }
+}
+
+function procurementUseIndonesianLocale_() {
+  var spreadsheet = getSpreadsheet_();
+  if (spreadsheet.getSpreadsheetLocale() !== "id_ID") spreadsheet.setSpreadsheetLocale("id_ID");
+}
+
+function procurementIsDateHeader_(header) {
+  return /^(tanggal\b|tgl\b|periode\s*(awal|akhir)$)/.test(procurementNormalizeHeader_(header));
+}
+
+/** Preserve calendar dates in the spreadsheet timezone, independent of script timezone. */
+function procurementParseCalendarDate_(value) {
+  if (value === "" || value === null || value === undefined) return "";
+  if (value instanceof Date && !isNaN(value.getTime())) return value;
+  if (typeof value === "number" && isFinite(value)) return value; // Existing Sheets serial date.
+  var text = String(value).trim();
+  var match = text.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  var year, month, day;
+  if (match) { year = Number(match[1]); month = Number(match[2]); day = Number(match[3]); }
+  else {
+    match = text.match(/^(\d{1,2})[\s\/-]+([a-zA-Z]+|\d{1,2})[\s\/-]+(\d{4})$/);
+    var months = { jan: 1, januari: 1, feb: 2, februari: 2, mar: 3, maret: 3, apr: 4, april: 4, mei: 5, may: 5, jun: 6, juni: 6, jul: 7, juli: 7, agu: 8, agt: 8, aug: 8, agustus: 8, sep: 9, september: 9, okt: 10, oct: 10, oktober: 10, nov: 11, november: 11, des: 12, dec: 12, desember: 12 };
+    if (match) { day = Number(match[1]); month = months[match[2].toLowerCase()] || Number(match[2]); year = Number(match[3]); }
+  }
+  var check = new Date(Date.UTC(year, month - 1, day));
+  if (!year || check.getUTCFullYear() !== year || check.getUTCMonth() !== month - 1 || check.getUTCDate() !== day) throw new Error("INVALID_DATE: Tanggal tidak valid: " + text);
+  var iso = year + "-" + String(month).padStart(2, "0") + "-" + String(day).padStart(2, "0");
+  return Utilities.parseDate(iso, getSpreadsheet_().getSpreadsheetTimeZone(), "yyyy-MM-dd");
+}
+
+/** Run once to normalize all master date columns, including historical yearly datasets. */
+function normalizeProcurementDates() {
+  return portalWithLock_(function () {
+    var spreadsheet = getSpreadsheet_(), seen = {}, plans = [];
+    // Validate every date first. Preserve formulas and empty cells.
+    procurementDatasetRows_().forEach(function (dataset) {
+      if (seen[dataset.masterSheet]) return;
+      seen[dataset.masterSheet] = true;
+      var sheet = spreadsheet.getSheetByName(dataset.masterSheet);
+      if (!sheet) throw new Error("SHEET_NOT_FOUND: " + dataset.masterSheet);
+      var context = procurementMasterContext_(sheet);
+      var count = sheet.getLastRow() - context.headerRow;
+      if (count <= 0) return;
+      context.headers.forEach(function (header, index) {
+        if (!procurementIsDateHeader_(header)) return;
+        var range = sheet.getRange(context.headerRow + 1, index + 1, count, 1);
+        var formulas = range.getFormulas();
+        var values = range.getValues().map(function (row, i) { return [formulas[i][0] || procurementParseCalendarDate_(row[0])]; });
+        plans.push({ range: range, values: values });
+      });
+    });
+    procurementUseIndonesianLocale_();
+    plans.forEach(function (plan) { plan.range.setValues(plan.values).setNumberFormat("dd-mmm-yyyy"); });
+    SpreadsheetApp.flush();
+    var message = plans.length + " kolom tanggal sudah memakai format Indonesia dd-MMM-yyyy.";
+    Logger.log(message);
+    return message;
+  });
+}
+
+/** Run in the editor after deploying this version. Moves the accidentally generated memo column. */
+function migrateMemoToPembelian() {
+  return portalWithLock_(function () {
+    var spreadsheet = getSpreadsheet_();
+    var seen = {};
+    var plans = [];
+    // Validate every affected dataset before writing anything.
+    procurementDatasetRows_().forEach(function (dataset) {
+      if (seen[dataset.masterSheet]) return;
+      seen[dataset.masterSheet] = true;
+      var sheet = spreadsheet.getSheetByName(dataset.masterSheet);
+      if (!sheet) throw new Error("SHEET_NOT_FOUND: " + dataset.masterSheet);
+      var context = procurementMasterContext_(sheet);
+      var sources = [], targets = [];
+      context.headers.forEach(function (header, index) {
+        var normalized = procurementNormalizeHeader_(header);
+        if (normalized === "tanggal memo") sources.push(index);
+        if (normalized === "tanggal memo pembelian") targets.push(index);
+      });
+      if (!sources.length) return;
+      if (sources.length !== 1 || targets.length !== 1) throw new Error("MEMO_MIGRATION_HEADERS: " + dataset.masterSheet + " harus memiliki tepat satu Tanggal Memo dan satu Tanggal Memo Pembelian.");
+      var rows = sheet.getDataRange().getValues();
+      var changes = [];
+      for (var index = context.headerRow; index < rows.length; index++) {
+        var value = rows[index][sources[0]];
+        if (value !== "" && value !== null && value !== undefined) changes.push({ row: index + 1, value: value });
+      }
+      if (changes.length) plans.push({ sheet: sheet, context: context, source: sources[0] + 1, target: targets[0] + 1, changes: changes });
+    });
+    // Backups retain both original columns, including any differing destination dates.
+    plans.forEach(function (plan) {
+      plan.backup = plan.sheet.copyTo(spreadsheet).setName("BKP MEMO " + Utilities.getUuid().slice(0, 12)).getName();
+    });
+    var moved = 0;
+    plans.forEach(function (plan) {
+      plan.changes.forEach(function (change) {
+        plan.sheet.getRange(change.row, plan.target).setValue(procurementParseCalendarDate_(change.value)).setNumberFormat("dd-mmm-yyyy");
+      });
+      SpreadsheetApp.flush();
+      // Clear the old values only after all destination writes have succeeded.
+      plan.changes.forEach(function (change) {
+        plan.sheet.getRange(change.row, plan.source).clearContent();
+        procurementWriteSlaFormulas_(plan.sheet, change.row, plan.context.headers);
+        moved++;
+      });
+    });
+    SpreadsheetApp.flush();
+    var message = moved + " tanggal dipindahkan ke Tanggal Memo Pembelian. Backup: " + (plans.map(function (plan) { return plan.backup; }).join(", ") || "tidak diperlukan");
+    Logger.log(message);
+    return message;
+  });
 }
 
 function procurementFirstHeader_(headers, aliases) {
@@ -657,7 +770,7 @@ function procurementFirstHeader_(headers, aliases) {
 function procurementReplaceOffers_(record, dataset) {
   var sheet = getSpreadsheet_().getSheetByName((dataset || procurementResolveDataset_({})).offersSheet);
   if (!sheet) return;
-  var context = procurementSheetContext_(sheet, "Request ID");
+  var context = procurementMigrateInputHeaders_(sheet, "Request ID");
   var requestId = String(record.originalRequestId || record.requestId || "").trim();
   var rows = portalRowsFromSheet_(sheet, context.headers, context.headerRow).filter(function (row) { return String(row["Request ID"] || "").trim() === requestId; });
   rows.forEach(function (row) { sheet.getRange(row.__rowNumber, 1, 1, sheet.getLastColumn()).clearContent(); });
@@ -667,10 +780,10 @@ function procurementReplaceOffers_(record, dataset) {
     var rowNumber = reusable[index] || nextRow++;
     procurementWritePatches_(sheet, rowNumber, context.headers, {
       "Request ID": requestId, "Urutan (Auto)": index + 1, "Vendor": offer.vendor,
-      "Penawaran Awal": offer.initialOffer, "Penawaran Revisi/BAFO": offer.bafo,
-      "Harga Final/Nego": offer.finalOffer, "PPN %": offer.taxRate,
-      "Final Incl. PPN": Number(offer.finalOffer || 0) * (1 + Number(offer.taxRate || 0.11)),
-      "Link Penawaran/BAFO": offer.quotationLink || "", "Lolos Teknis": offer.technicalPass ? "Ya" : "Tidak",
+      "Penawaran Awal": offer.initialOffer,
+      "Penawaran Akhir": offer.finalOffer, "PPN %": offer.taxRate,
+      "Penawaran Akhir Incl. PPN": Number(offer.finalOffer || 0) * (1 + Number(offer.taxRate || 0.11)),
+      "Link Penawaran": offer.quotationLink || "", "Lolos Teknis": offer.technicalPass ? "Ya" : "Tidak",
       "Pemenang": offer.winner ? "Ya" : "Tidak"
     });
   });
@@ -717,9 +830,7 @@ function procurementPromoteApproved_(request, actor, now, approval) {
   if (!existing) {
     var values = {
       "Nomor Request": masterId,
-      // Kompatibilitas sheet lama; bila kolom ini sudah dihapus, nilainya diabaikan.
-      "Request ID Asli": portalRequestNumber,
-      "Nama": request.REQUESTER_NAME,
+      [procurementFirstHeader_(masterContext.headers, ["Nama Requestor", "Nama"]) || "Nama Requestor"]: request.REQUESTER_NAME,
       "Alamat Email User": request.REQUESTER_EMAIL,
       "Group/Div": request.REQUESTER_DIVISION || "",
       "Lvl Jabatan": request.REQUESTER_POSITION || "",
@@ -917,9 +1028,8 @@ function procurementIso_(value) { if (!value) return ""; var date = new Date(val
 function procurementDateOnly_(value) {
   var date = value instanceof Date ? value : new Date(value);
   if (isNaN(date.getTime())) date = new Date();
-  var timezone = Session.getScriptTimeZone() || "Asia/Jakarta";
-  var parts = Utilities.formatDate(date, timezone, "yyyy-MM-dd").split("-");
-  return new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+  var timezone = getSpreadsheet_().getSpreadsheetTimeZone();
+  return Utilities.parseDate(Utilities.formatDate(date, timezone, "yyyy-MM-dd"), timezone, "yyyy-MM-dd");
 }
 
 // Jalankan sekali setelah deploy untuk merapikan tanggal pada baris master lama.
@@ -945,13 +1055,14 @@ function procurementFormatMasterRequestDate_(sheet, rowNumber, headers, value) {
   var range = sheet.getRange(rowNumber, column + 1);
   range.setValue(value);
   range.setNumberFormat("dd-mmm-yyyy");
+  procurementUseIndonesianLocale_();
 }
 function procurementMasterContext_(sheet) {
   var lastColumn = sheet.getLastColumn();
   var lastRow = typeof sheet.getLastRow === "function" ? sheet.getLastRow() : 20;
   var scanRows = Math.min(Math.max(lastRow, 1), 20);
   var grid = sheet.getRange(1, 1, scanRows, lastColumn).getDisplayValues();
-  var canonical = ["Nomor Request", "Request ID Asli", "Nama", "Alamat Email User", "Tanggal Request", "Jenis Permintaan", "Status"];
+  var canonical = ["Nomor Request", "Request ID Asli", "Nama", "Nama Requestor", "Alamat Email User", "Tanggal Request", "Jenis Permintaan", "Status"];
   for (var rowIndex = 0; rowIndex < grid.length; rowIndex++) {
     var normalized = grid[rowIndex].map(procurementNormalizeHeader_);
     if (normalized.indexOf("nomor request") < 0) continue;
@@ -980,7 +1091,6 @@ function procurementNextMasterId_(sheet, headers, headerRow, dataset) {
   return "PROC-" + year + "-" + String(next).padStart(4, "0");
 }
 function procurementBody_(value) { if (!value || typeof value !== "object") return {}; if (value.body && typeof value.body === "object") return value.body; if (value.payload && typeof value.payload === "object") return value.payload; return value; }
-<<<<<<< HEAD
 
   function procurementWriteSlaFormulas_(sheet, rowNumber, headers) {
     var formulas = procurementSlaFormulas_(headers, rowNumber);
@@ -1023,8 +1133,7 @@ function procurementBody_(value) { if (!value || typeof value !== "object") retu
     });
   }
 
-/** Keep in sync with procurementSlaFormulas_ in ProcurementReview.gs. */
-/** Keep in sync with procurementSlaFormulas_ in ProcurementReview.gs. */
+/** Keep in sync with procurementSlaFormulas in lib/procurement-sla-formulas.ts. */
 function procurementSlaFormulas_(headers, rowNumber) {
     const normalize = (value) => value.replace(/\s+/g, " ").trim().toLowerCase();
     const normalized = headers.map(normalize);
@@ -1075,82 +1184,54 @@ function procurementSlaFormulas_(headers, rowNumber) {
         patches[header] = `=IFERROR(IF(OR(${start}="",${end}="",${endDate}<${startDate}),"",NETWORKDAYS(${startDate},${endDate})-NETWORKDAYS(${startDate},${startDate})),"")`;
     });
     return patches;
-=======
-
-/** Menulis rumus SLA ke kolom yang tersedia pada master pengadaan. */
-function procurementWriteSlaFormulas_(sheet, rowNumber, headers) {
-  var formulas = procurementSlaFormulas_(headers, rowNumber);
-  Object.keys(formulas).forEach(function (header) {
-    sheet.getRange(rowNumber, headers.indexOf(header) + 1).setFormula(formulas[header]).setNumberFormat("0");
-  });
 }
 
-/** Jalankan manual sekali untuk mengisi rumus SLA pada record lama di seluruh dataset. */
-function backfillProcurementSlaFormulas() {
+/** Rename headers in place; historical values and column positions stay intact. */
+function procurementMigrateInputHeaders_(sheet, requiredHeader) {
+  var context = requiredHeader === "Nomor Request" ? procurementMasterContext_(sheet) : procurementSheetContext_(sheet, requiredHeader);
+  var aliases = requiredHeader === "Nomor Request" ? {
+    "Nama Requestor": ["Nama", "Nama PIC"],
+    "Penawaran Awal Excl. PPN": ["Harga Awal Excl. PPN"],
+    "Penawaran Akhir Excl. PPN": ["Amount PO Excl. PPN", "Harga Final Excl. PPN"]
+  } : {
+    "Penawaran Akhir": ["Harga Final/Nego", "Harga Final / Nego", "Harga Final"],
+    "Penawaran Akhir Incl. PPN": ["Final Incl. PPN"],
+    "Link Penawaran": ["Link Penawaran/BAFO"]
+  };
+  Object.keys(aliases).forEach(function (header) {
+    if (context.headers.indexOf(header) >= 0) return;
+    var previous = procurementFirstHeader_(context.headers, aliases[header]);
+    if (!previous) return;
+    var column = context.headers.indexOf(previous);
+    sheet.getRange(context.headerRow, column + 1).setValue(header);
+    context.headers[column] = header;
+  });
+  return context;
+}
+
+/** Run once to update existing yearly datasets as well as the legacy workbook. */
+function migrateProcurementInputLabels() {
   return portalWithLock_(function () {
-    var spreadsheet = getSpreadsheet_();
-    var seen = {};
-    var updated = 0;
+    var spreadsheet = getSpreadsheet_(), seen = {};
     procurementDatasetRows_().forEach(function (dataset) {
-      if (seen[dataset.masterSheet]) return;
-      seen[dataset.masterSheet] = true;
-      var sheet = spreadsheet.getSheetByName(dataset.masterSheet);
-      if (!sheet) throw new Error("SHEET_NOT_FOUND: " + dataset.masterSheet);
-      var context = procurementMasterContext_(sheet);
-      var count = sheet.getLastRow() - context.headerRow;
-      if (count <= 0) return;
-      var rows = sheet.getRange(context.headerRow + 1, 1, count, sheet.getLastColumn()).getValues();
-      var idColumn = context.headers.indexOf("Nomor Request");
-      var columns = Object.keys(procurementSlaFormulas_(context.headers, context.headerRow + 1));
-      columns.forEach(function (header) {
-        var range = sheet.getRange(context.headerRow + 1, context.headers.indexOf(header) + 1, count, 1);
-        var existingFormulas = range.getFormulas();
-        var values = range.getValues();
-        var formulas = rows.map(function (row, index) {
-          if (!String(row[idColumn] || "").trim()) return [existingFormulas[index][0] || values[index][0]];
-          updated++;
-          return [procurementSlaFormulas_(context.headers, context.headerRow + index + 1)[header]];
+      [[dataset.masterSheet, "Nomor Request"], [dataset.offersSheet, "Request ID"]].forEach(function (entry) {
+        if (seen[entry[0]]) return;
+        seen[entry[0]] = true;
+        var sheet = spreadsheet.getSheetByName(entry[0]);
+        if (!sheet) return;
+        var context = procurementMigrateInputHeaders_(sheet, entry[1]);
+        var methodColumn = context.headers.indexOf("Metode Pengadaan");
+        if (methodColumn < 0) return;
+        var count = sheet.getLastRow() - context.headerRow;
+        if (count <= 0) return;
+        var range = sheet.getRange(context.headerRow + 1, methodColumn + 1, count, 1);
+        var values = range.getValues(), formulas = range.getFormulas();
+        values.forEach(function (row, index) {
+          if (!formulas[index][0] && /^tender$/i.test(String(row[0]).trim())) sheet.getRange(context.headerRow + index + 1, methodColumn + 1).setValue("Pemilihan Langsung");
         });
-        range.setValues(formulas).setNumberFormat("0");
       });
     });
     SpreadsheetApp.flush();
-    return updated + " sel SLA sudah diisi rumus.";
+    return "Header input dan metode pengadaan selesai disesuaikan.";
   });
-}
-
-/** Harus konsisten dengan procurementSlaFormulas di frontend. */
-function procurementSlaFormulas_(headers, rowNumber) {
-  function normalize(value) { return String(value || "").replace(/\s+/g, " ").trim().toLowerCase(); }
-  var normalized = headers.map(normalize);
-  function cell(header) {
-    var column = normalized.indexOf(normalize(header)) + 1;
-    if (!column) return "";
-    var name = "";
-    while (column) {
-      column--;
-      name = String.fromCharCode(65 + column % 26) + name;
-      column = Math.floor(column / 26);
-    }
-    return name + rowNumber;
-  }
-  var patches = {};
-  headers.forEach(function (header) {
-    var name = normalize(header);
-    if (!/^sla\b/.test(name)) return;
-    var dates;
-    if (/approval memo|persetujuan memo/.test(name)) dates = ["Tanggal Memo", "Tanggal Send FPC"];
-    else if (/fpc/.test(name)) dates = ["Tanggal Send FPC", "Tanggal Approval FPC"];
-    else if (/\bpo\b|total/.test(name)) dates = ["Tanggal Request", "Tanggal PO"];
-    else if (/pengadaan/.test(name)) dates = ["Tanggal Request", "Tanggal Memo"];
-    else return;
-    var start = cell(dates[0]);
-    var end = cell(dates[1]);
-    if (!start || !end) return;
-    var startDate = "IF(ISNUMBER(" + start + "),INT(" + start + "),DATEVALUE(" + start + "))";
-    var endDate = "IF(ISNUMBER(" + end + "),INT(" + end + "),DATEVALUE(" + end + "))";
-    patches[header] = "=IFERROR(IF(OR(" + start + "=\"\"," + end + "=\"\"," + endDate + "<" + startDate + "),\"\",NETWORKDAYS(" + startDate + "," + endDate + ")-NETWORKDAYS(" + startDate + "," + startDate + ")),\"\")";
-  });
-  return patches;
->>>>>>> 517678925e6f1ed8d3ebab8de8c38e966875116a
 }

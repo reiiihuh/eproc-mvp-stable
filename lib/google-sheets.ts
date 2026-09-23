@@ -144,15 +144,26 @@ export class GoogleSheetsWorkspaceAdapter {
     await this.writeCells(title, context.headerIndex + 1, context.headers, { [header]: header })
   }
 
-  /** Creates or updates one procurement, then keeps its tender offers in sync. */
+  private async renameInputHeaders(context: SheetContext, title: string, aliases: Record<string, string[]>) {
+    for (const [header, previous] of Object.entries(aliases)) {
+      if (context.headers.includes(header)) continue
+      const index = context.headers.findIndex((value) => previous.includes(value))
+      if (index < 0) { await this.ensureHeader(context, title, header); continue }
+      context.headers[index] = header
+      await this.writeCells(title, context.headerIndex + 1, context.headers, { [header]: header })
+    }
+  }
+
+  /** Creates or updates one procurement, then keeps its vendor offers in sync. */
   async upsertProcurement(record: ProcurementRecord) {
     const context = await this.context(SHEETS.procurements, "Nomor Request")
+    await this.renameInputHeaders(context, SHEETS.procurements, { "Nama Requestor": ["Nama", "Nama PIC"], "Penawaran Awal Excl. PPN": ["Harga Awal Excl. PPN"], "Penawaran Akhir Excl. PPN": ["Amount PO Excl. PPN", "Harga Final Excl. PPN"] })
     const memoHeader = context.headers.find((header) => header.replace(/\s+/g, " ").trim().toLowerCase() === "tanggal memo pembelian")
     if (!memoHeader) throw new Error("Kolom Tanggal Memo Pembelian wajib tersedia. Tidak ada kolom baru yang dibuat.")
     await this.ensureHeader(context, SHEETS.procurements, "Currency")
     await this.ensureHeader(context, SHEETS.procurements, "Keterangan Status")
     await this.ensureHeader(context, SHEETS.procurements, "Jenis Budget")
-    await this.ensureHeader(context, SHEETS.procurements, "Harga Awal Excl. PPN")
+    await this.ensureHeader(context, SHEETS.procurements, "Penawaran Awal Excl. PPN")
     await this.ensureHeader(context, SHEETS.procurements, "Tanggal Persetujuan Direksi")
     await this.ensureHeader(context, SHEETS.procurements, "Tanggal Send FPC")
     await this.ensureHeader(context, SHEETS.procurements, "Tanggal Approval FPC")
@@ -161,13 +172,13 @@ export class GoogleSheetsWorkspaceAdapter {
     if (isNew) await this.copyPreviousRow(context.sheetId, rowNumber, 204)
     const sheetRequestId = record.requestId
     await this.writeCells(SHEETS.procurements, rowNumber, context.headers, {
-      Status: record.status, "Keterangan Status": record.statusNotes, "Nomor Request": sheetRequestId, Nama: record.picName, "Group/Div": record.division,
+      Status: record.status, "Keterangan Status": record.statusNotes, "Nomor Request": sheetRequestId, "Nama Requestor": record.picName, "Group/Div": record.division,
       "Lvl Jabatan": record.position, Lokasi: record.location, "Tanggal Request": record.requestDate, Bentuk: record.requestType,
       "Alamat Email User": record.email, Item: record.itemName, Deskripsi: record.description, Qty: record.quantity,
       Kategori: record.category, "Jenis Permintaan": record.requestKind, PeriodeAwal: record.periodStart || "",
       PeriodeAkhir: record.periodEnd || "", "Metode Pengadaan": record.procurementMethod, Budget: record.budget, "Jenis Budget": record.budgetType || "",
       "Kode Budget": record.budgetCode, "Vendor Terpilih": record.selectedVendor, "Nomor PO": record.poNumber,
-      "Tanggal PO": record.poDate || "", [memoHeader]: record.memoDate || "", "Tanggal Persetujuan Direksi": record.directorApprovalDate || "", "Tanggal Send FPC": record.fpcSentDate || "", "Tanggal Approval FPC": record.fpcApprovalDate || "", "Harga Awal Excl. PPN": Number(record.initialPriceExcl || 0), "Amount PO Excl. PPN": Number(record.poAmountExcl || 0),
+      "Tanggal PO": record.poDate || "", [memoHeader]: record.memoDate || "", "Tanggal Persetujuan Direksi": record.directorApprovalDate || "", "Tanggal Send FPC": record.fpcSentDate || "", "Tanggal Approval FPC": record.fpcApprovalDate || "", "Penawaran Awal Excl. PPN": Number(record.initialPriceExcl || 0), "Penawaran Akhir Excl. PPN": Number(record.poAmountExcl || 0),
       "Amount PO Incld. PPN": Number(record.poAmountIncl || 0), "Amount Efficiency incld PPN": Number(record.efficiency || 0), Currency: record.currency,
       ...procurementSlaFormulas(context.headers, rowNumber),
     })
@@ -178,7 +189,7 @@ export class GoogleSheetsWorkspaceAdapter {
         cell: { userEnteredFormat: { numberFormat: { type: "DATE", pattern: "dd-mmm-yyyy" } } }, fields: "userEnteredFormat.numberFormat",
       } }] : []),
     ] }) })
-    await this.replaceOffers(sheetRequestId, record.procurementMethod === "Tender" ? record.offers : [])
+    await this.replaceOffers(sheetRequestId, record.procurementMethod === "Pemilihan Langsung" ? record.offers : [])
     return { ...record, sourceRow: rowNumber }
   }
 
@@ -188,6 +199,7 @@ export class GoogleSheetsWorkspaceAdapter {
    */
   private async replaceOffers(requestId: string, offers: ProcurementRecord["offers"]) {
     const context = await this.context(SHEETS.offers, "Request ID")
+    await this.renameInputHeaders(context, SHEETS.offers, { "Penawaran Akhir": ["Harga Final/Nego", "Harga Final / Nego", "Harga Final"], "Penawaran Akhir Incl. PPN": ["Final Incl. PPN"], "Link Penawaran": ["Link Penawaran/BAFO"] })
     const requestColumn = context.headers.indexOf("Request ID")
     const existingRows = context.rows.map((row, index) => ({ row, rowNumber: index + 1 })).filter(({ row, rowNumber }) => rowNumber > context.headerIndex + 1 && text(row[requestColumn]) === requestId)
     if (existingRows.length) await sheetsFetch(this.token, this.baseUrl("/values:batchClear"), { method: "POST", body: JSON.stringify({ ranges: existingRows.map(({ rowNumber }) => `${quoteSheet(SHEETS.offers)}!A${rowNumber}:L${rowNumber}`) }) })
@@ -198,8 +210,8 @@ export class GoogleSheetsWorkspaceAdapter {
       const offer = offers[index]
       await this.writeCells(SHEETS.offers, rowNumber, context.headers, {
         "Request ID": requestId, "Urutan (Auto)": index + 1, Vendor: offer.vendor, "Penawaran Awal": offer.initialOffer,
-        "Penawaran Revisi/BAFO": offer.bafo, "Harga Final/Nego": offer.finalOffer, "PPN %": offer.taxRate,
-        "Final Incl. PPN": offer.finalOffer * (1 + offer.taxRate), "Link Penawaran/BAFO": offer.quotationLink || "",
+        "Penawaran Akhir": offer.finalOffer, "PPN %": offer.taxRate,
+        "Penawaran Akhir Incl. PPN": offer.finalOffer * (1 + offer.taxRate), "Link Penawaran": offer.quotationLink || "",
         "Lolos Teknis": offer.technicalPass ? "Ya" : "Tidak", Pemenang: offer.winner ? "Ya" : "Tidak",
       })
     }

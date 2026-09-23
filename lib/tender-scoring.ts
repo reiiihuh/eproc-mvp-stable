@@ -94,7 +94,7 @@ export function exportScorecardXlsx(scorecard: TenderScorecard) {
   const endRow = startRow + Math.max(results.length - 1, 0)
   const rows: unknown[][] = Array.from({ length: Math.max(endRow + 2, 16) }, () => Array(22).fill(""))
 
-  rows[0][0] = `SCORING ${scorecard.projectName.toUpperCase() || "TENDER"}`
+  rows[0][0] = `SCORING ${scorecard.projectName.toUpperCase() || "PEMILIHAN LANGSUNG"}`
   rows[1][0] = "Nama Project"
   rows[1][1] = scorecard.projectName
   // Request ID dan evaluator disembunyikan sementara dari seluruh hasil export.
@@ -117,8 +117,8 @@ export function exportScorecardXlsx(scorecard: TenderScorecard) {
   rows[5][8] = "COMMERCIAL SCORING"
   rows[5][13] = "OVERALL SCORING - TECHNICAL AND COMMERCIAL"
   rows[6].splice(0, 19,
-    "No", "Vendor", "Harga awal (Excl. PPN)", "Harga final (Excl. PPN)", "Total Diskon (IDR)", "Total Diskon (%)", "Keterangan", "",
-    "Vendor", "Harga Final", "Poin Komersial", "", "",
+    "No", "Vendor", "Harga awal (Excl. PPN)", "Penawaran akhir (Excl. PPN)", "Total Diskon (IDR)", "Total Diskon (%)", "Keterangan", "",
+    "Vendor", "Penawaran Akhir", "Poin Komersial", "", "",
     "Vendor", "Poin Teknis", "Poin Komersial", `Teknis ${scorecard.technicalWeight}%`, `Komersial ${scorecard.commercialWeight}%`, "Final",
   )
 
@@ -161,14 +161,14 @@ export function exportScorecardXlsx(scorecard: TenderScorecard) {
     if (sheet[`F${row}`]) sheet[`F${row}`].z = "0.00%"
     for (const column of ["K", "O", "P", "Q", "R", "S"]) if (sheet[`${column}${row}`]) sheet[`${column}${row}`].z = "0.00"
   }
-  XLSX.utils.book_append_sheet(workbook, sheet, "Scoring Tender")
+  XLSX.utils.book_append_sheet(workbook, sheet, "Scoring Pemilihan Langsung")
 
   const summary = XLSX.utils.aoa_to_sheet([
-    ["RANKING SCORING TENDER"],
-    ["Peringkat", "Vendor", "Poin Teknis", "Poin Komersial", `Teknis ${scorecard.technicalWeight}%`, `Komersial ${scorecard.commercialWeight}%`, "Final", "Harga Final"],
+    ["RANKING SCORING PEMILIHAN LANGSUNG"],
+    ["Peringkat", "Vendor", "Poin Teknis", "Poin Komersial", `Teknis ${scorecard.technicalWeight}%`, `Komersial ${scorecard.commercialWeight}%`, "Final", "Penawaran Akhir"],
     ...ranking.map((vendor) => [vendor.rank, vendor.name, vendor.technicalScore, vendor.commercialScore, vendor.weightedTechnical, vendor.weightedCommercial, vendor.finalScore, vendor.finalPrice]),
     [],
-    ["Vendor Terpilih", ranking[0]?.name || "—", "Nilai Akhir", ranking[0]?.finalScore ?? 0, "Harga Final", ranking[0]?.finalPrice ?? 0, "", ""],
+    ["Vendor Terpilih", ranking[0]?.name || "—", "Nilai Akhir", ranking[0]?.finalScore ?? 0, "Penawaran Akhir", ranking[0]?.finalPrice ?? 0, "", ""],
   ])
   summary["!merges"] = [XLSX.utils.decode_range("A1:H1")]
   summary["!cols"] = [12, 24, 16, 18, 16, 18, 14, 20].map((wch) => ({ wch }))
@@ -189,7 +189,7 @@ export function exportScorecardDocx(scorecard: TenderScorecard) {
   const { ranking } = calculateScorecard(scorecard)
   const formulas = scorecardFormulaDescription(scorecard)
   return createDocx(
-    `Scoring Tender · ${scorecard.projectName || "Project"}`,
+    `Scoring Pemilihan Langsung · ${scorecard.projectName || "Project"}`,
     [
       `Tanggal scoring: ${formatIndonesianDate(scorecard.scoringDate) || "—"}`,
       `Bobot teknis ${scorecard.technicalWeight}% · komersial ${scorecard.commercialWeight}%`,
@@ -197,7 +197,7 @@ export function exportScorecardDocx(scorecard: TenderScorecard) {
       `Rumus final: ${formulas.final}`,
       `Vendor terpilih: ${ranking[0]?.name || "—"}${ranking[0] ? ` · Nilai akhir ${ranking[0].finalScore.toFixed(2)}` : ""}`,
     ],
-    ["Rank", "Vendor", "Poin Teknis", "Poin Komersial", "Bobot Teknis", "Bobot Komersial", "Final", "Harga Final"],
+    ["Rank", "Vendor", "Poin Teknis", "Poin Komersial", "Bobot Teknis", "Bobot Komersial", "Final", "Penawaran Akhir"],
     ranking.map((vendor) => [vendor.rank, vendor.name, vendor.technicalScore.toFixed(2), vendor.commercialScore.toFixed(2), vendor.weightedTechnical.toFixed(2), vendor.weightedCommercial.toFixed(2), vendor.finalScore.toFixed(2), new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(vendor.finalPrice)]),
   )
 }
@@ -217,7 +217,7 @@ export async function exportScorecardPdf(scorecard: TenderScorecard) {
   pdf.addImage(logo, "PNG", 244, 6, 43, 14)
   pdf.setTextColor(255, 255, 255)
   pdf.setFontSize(17)
-  pdf.text("BERITA ACARA SCORING TENDER", 14, 13)
+  pdf.text("BERITA ACARA SCORING PEMILIHAN LANGSUNG", 14, 13)
   pdf.setFontSize(11)
   pdf.text(scorecard.projectName || "Nama project belum diisi", 14, 21)
   pdf.setFontSize(8)
@@ -230,7 +230,7 @@ export async function exportScorecardPdf(scorecard: TenderScorecard) {
 
   autoTable(pdf, {
     startY: 44,
-    head: [["No", "Vendor", "Harga Awal", "Harga Final", "Diskon", "Diskon %", "Keterangan"]],
+    head: [["No", "Vendor", "Harga Awal", "Penawaran Akhir", "Diskon", "Diskon %", "Keterangan"]],
     body: results.map((vendor, index) => [index + 1, vendor.name, money.format(vendor.initialPrice), money.format(vendor.finalPrice), money.format(vendor.discountAmount), `${(vendor.discountPercent * 100).toFixed(2)}%`, reportNotes(vendor.notes)]),
     styles: { fontSize: 7, cellPadding: 1.7, valign: "middle", overflow: "linebreak", lineWidth: 0.1 },
     headStyles: { fillColor: [32, 117, 184], textColor: 255 },
@@ -242,7 +242,7 @@ export async function exportScorecardPdf(scorecard: TenderScorecard) {
   const firstTableEnd = (pdf as jsPDF & { lastAutoTable?: { finalY: number } }).lastAutoTable?.finalY ?? 80
   autoTable(pdf, {
     startY: firstTableEnd + 8,
-    head: [["Rank", "Vendor", "Poin Teknis", "Poin Komersial", `Teknis ${scorecard.technicalWeight}%`, `Komersial ${scorecard.commercialWeight}%`, "Final", "Harga Final"]],
+    head: [["Rank", "Vendor", "Poin Teknis", "Poin Komersial", `Teknis ${scorecard.technicalWeight}%`, `Komersial ${scorecard.commercialWeight}%`, "Final", "Penawaran Akhir"]],
     body: ranking.map((vendor) => [vendor.rank, vendor.name, vendor.technicalScore.toFixed(2), vendor.commercialScore.toFixed(2), vendor.weightedTechnical.toFixed(2), vendor.weightedCommercial.toFixed(2), vendor.finalScore.toFixed(2), money.format(vendor.finalPrice)]),
     styles: { fontSize: 7.2, cellPadding: 1.7, halign: "center", overflow: "linebreak" },
     headStyles: { fillColor: [8, 47, 99], textColor: 255 },
@@ -263,7 +263,7 @@ export async function exportScorecardPdf(scorecard: TenderScorecard) {
   pdf.setFont("helvetica", "bold")
   pdf.text(`VENDOR TERPILIH: ${winner?.name || "-"}`, 18, resultY + 8)
   pdf.setFontSize(9)
-  pdf.text(`Nilai akhir ${winner?.finalScore.toFixed(2) || "-"} · Harga final ${winner ? money.format(winner.finalPrice) : "-"}`, 18, resultY + 14)
+  pdf.text(`Nilai akhir ${winner?.finalScore.toFixed(2) || "-"} · Penawaran akhir ${winner ? money.format(winner.finalPrice) : "-"}`, 18, resultY + 14)
   pdf.setTextColor(24, 36, 52)
   pdf.setFillColor(234, 242, 251)
   pdf.roundedRect(14, resultY + 23, 269, 20, 2, 2, "F")
@@ -285,5 +285,5 @@ export async function exportScorecardPdf(scorecard: TenderScorecard) {
     pdf.line(198, signatureY + 18, 258, signatureY + 18)
   }
 
-  pdf.save(`Scoring_Tender_${(scorecard.projectName || "Project").replace(/[^a-z0-9]+/gi, "_")}.pdf`)
+  pdf.save(`Scoring_Pemilihan_Langsung_${(scorecard.projectName || "Project").replace(/[^a-z0-9]+/gi, "_")}.pdf`)
 }

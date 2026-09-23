@@ -3,7 +3,7 @@ import "./globals.css"
 
 export const metadata: Metadata = {
   title: "e-Proc Dashboard Dev",
-  description: "Workspace pengadaan IT berbasis file dengan tender, dashboard, dokumen, dan export laporan.",
+  description: "Workspace pengadaan IT berbasis file dengan pemilihan langsung, dashboard, dokumen, dan export laporan.",
   icons: { icon: "/favicon.png", shortcut: "/favicon.png" },
   other: { "codex-preview": "development" },
 }
