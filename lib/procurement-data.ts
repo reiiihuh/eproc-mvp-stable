@@ -341,12 +341,17 @@ function mergeDynamicOffers(workbook: XLSX.WorkBook, records: ProcurementRecord[
     const key = record.originalRequestId || record.requestId
     byOriginalId.set(key, [...(byOriginalId.get(key) ?? []), record])
   })
+  const loadedOffers = new Set<string>()
   grid.slice(headerIndex + 1).forEach((row, index) => {
     const item = rowObject(headers, row)
     const requestId = asText(item["Request ID"])
     const vendor = asText(item["Vendor"])
     const target = byOriginalId.get(requestId)?.[0]
     if (!target || !vendor) return
+    if (!loadedOffers.has(target.recordUid)) {
+      target.offers = []
+      loadedOffers.add(target.recordUid)
+    }
     const rawTaxRate = asNumber(item["PPN %"])
     target.offers.push({
       id: `dynamic-${target.recordUid}-${index}`,

@@ -1,7 +1,7 @@
 /** Backend review Procurement. Semua identitas dan role berasal dari ID token terverifikasi. */
 // Fallback mandiri agar modul review tetap jalan saat helper BackendPortal versi lama belum ikut ter-deploy.
 function portalBody_(value) { return procurementBody_(value); }
-var PROCUREMENT_MASTER_WRITE_CONTRACT_ = "nomor-request-memo-pembelian-v1";
+var PROCUREMENT_MASTER_WRITE_CONTRACT_ = "procurement-vendor-offers-v2";
 
 function testProcurementReviewModule() {
   var parsed = portalBody_({ payload: { ready: true } });
@@ -390,6 +390,8 @@ function procurementUpsertRecord_(body) {
     record.requestId = existing ? String(existing["Nomor Request"]).trim() : procurementNextMasterId_(sheet, context.headers, context.headerRow, dataset);
     // Legacy relations are read from the stored row, never edited through the form.
     record.originalRequestId = existing ? String(existing["Request ID Asli"] || record.requestId).trim() : record.requestId;
+    // Validate offer storage before changing the master row.
+    if ((record.offers || []).length) procurementOfferStorage_(dataset);
     var rowNumber = existing ? existing.__rowNumber : procurementNextDataRow_(sheet, context);
     if (!existing && rowNumber > context.headerRow + 1) {
       var source = sheet.getRange(rowNumber - 1, 1, 1, sheet.getLastColumn());
@@ -432,6 +434,7 @@ function procurementUpsertRecord_(body) {
       "Amount Efficiency incld PPN": Number(record.efficiency || 0),
       "Currency": record.currency
     };
+    Object.assign(patches, procurementLegacyOfferPatches_(context.headers, record.offers || []));
     procurementWritePatches_(sheet, rowNumber, context.headers, patches);
     procurementWriteSlaFormulas_(sheet, rowNumber, context.headers);
     ["Penawaran Awal Excl. PPN", "Penawaran Akhir Excl. PPN", "Amount PO Incld. PPN", "Amount Efficiency incld PPN"].forEach(function (header) {
@@ -850,22 +853,46 @@ function procurementFirstHeader_(headers, aliases) {
   return "";
 }
 
-function procurementReplaceOffers_(record, dataset) {
-  var sheet = getSpreadsheet_().getSheetByName((dataset || procurementResolveDataset_({})).offersSheet);
-  if (!sheet) return;
+/** Keep existing master vendor columns aligned with the complete participant table. */
+function procurementLegacyOfferPatches_(headers, offers) {
+  var patches = {};
+  headers.forEach(function (header) {
+    var match = procurementNormalizeHeader_(header).match(/^(vendor|penawaran vendor|nego harga vendor|penawaran awal vendor|penawaran akhir vendor) (\d+)$/);
+    if (!match) return;
+    var offer = offers[Number(match[2]) - 1];
+    patches[header] = !offer ? "" : match[1] === "vendor" ? offer.vendor : /^(penawaran vendor|penawaran awal vendor)$/.test(match[1]) ? offer.initialOffer : offer.finalOffer;
+  });
+  return patches;
+}
+
+function procurementOfferStorage_(dataset) {
+  var title = dataset.offersSheet;
+  var sheet = getSpreadsheet_().getSheetByName(title);
+  if (!sheet) throw new Error("SHEET_NOT_FOUND: " + title + ". Vendor peserta belum dapat disimpan. Siapkan sheet penawaran dataset ini terlebih dahulu.");
   var context = procurementMigrateInputHeaders_(sheet, "Request ID");
+  var required = ["Request ID", "Urutan (Auto)", "Vendor", "Penawaran Awal", "Penawaran Akhir", "PPN %", "Penawaran Akhir Incl. PPN", "Link Penawaran", "Lolos Teknis", "Pemenang"];
+  context = procurementEnsureSheetHeaders_(sheet, "Request ID", required);
+  return { sheet: sheet, context: context };
+}
+
+function procurementReplaceOffers_(record, dataset) {
+  dataset = dataset || procurementResolveDataset_({});
+  if (!(record.offers || []).length && !getSpreadsheet_().getSheetByName(dataset.offersSheet)) return;
+  var storage = procurementOfferStorage_(dataset);
+  var sheet = storage.sheet, context = storage.context;
   var requestId = String(record.originalRequestId || record.requestId || "").trim();
   var rows = portalRowsFromSheet_(sheet, context.headers, context.headerRow).filter(function (row) { return String(row["Request ID"] || "").trim() === requestId; });
+  // Calculate append position BEFORE clearing reusable rows to avoid overwriting participants.
+  var nextRow = procurementNextSheetDataRow_(sheet, context, "Request ID");
   rows.forEach(function (row) { sheet.getRange(row.__rowNumber, 1, 1, sheet.getLastColumn()).clearContent(); });
   var reusable = rows.map(function (row) { return row.__rowNumber; });
-  var nextRow = procurementNextSheetDataRow_(sheet, context, "Request ID");
   (record.offers || []).forEach(function (offer, index) {
     var rowNumber = reusable[index] || nextRow++;
     procurementWritePatches_(sheet, rowNumber, context.headers, {
       "Request ID": requestId, "Urutan (Auto)": index + 1, "Vendor": offer.vendor,
       "Penawaran Awal": offer.initialOffer,
       "Penawaran Akhir": offer.finalOffer, "PPN %": offer.taxRate,
-      "Penawaran Akhir Incl. PPN": Number(offer.finalOffer || 0) * (1 + Number(offer.taxRate || 0.11)),
+      "Penawaran Akhir Incl. PPN": Number(offer.finalOffer || 0) * (1 + Number(offer.taxRate === undefined ? 0.11 : offer.taxRate)),
       "Link Penawaran": offer.quotationLink || "", "Lolos Teknis": offer.technicalPass ? "Ya" : "Tidak",
       "Pemenang": offer.winner ? "Ya" : "Tidak"
     });

@@ -135,7 +135,7 @@ export class AppsScriptPortalReviewRepository implements PortalReviewRepository 
   async upsertProcurementRecord(record: ProcurementRecord, mode: "create" | "edit" = "create") {
     // Check the actual deployment on every save, not the cached login session.
     const session = await this.call<ProcurementSession>("getProcurementSession")
-    if (session.masterWriteContract !== "nomor-request-memo-pembelian-v1") {
+    if (session.masterWriteContract !== "procurement-vendor-offers-v2") {
       throw new Error("Penyimpanan dibatalkan: aplikasi masih terhubung ke Apps Script versi lama. Update deployment yang URL /exec-nya dipakai aplikasi ke versi terbaru, lalu coba lagi. Data belum dikirim untuk disimpan.")
     }
     return this.write<{ sourceRow: number; requestId?: string }>("procurement.upsertRecord", { record, mode, datasetKey: this.datasetKey })

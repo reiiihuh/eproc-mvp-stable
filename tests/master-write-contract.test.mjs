@@ -20,7 +20,7 @@ function setup(contract) {
 }
 
 test("backend lama ditolak sebelum payload record dikirim", async () => {
-  for (const version of [undefined, "old"]) {
+  for (const version of [undefined, "old", "nomor-request-memo-pembelian-v1"]) {
     const { repository, calls } = setup(version)
     await assert.rejects(repository.upsertProcurementRecord({ requestId: "REQ-1" }, "edit"), /Apps Script versi lama/)
     assert.deepEqual(calls.map(call => call.action), ["getProcurementSession"])
@@ -29,7 +29,7 @@ test("backend lama ditolak sebelum payload record dikirim", async () => {
 })
 
 test("backend terbaru menerima simpan dan versi diperiksa ulang meskipun sesi login tersimpan", async () => {
-  const { repository, state, calls } = setup("nomor-request-memo-pembelian-v1")
+  const { repository, state, calls } = setup("procurement-vendor-offers-v2")
   await repository.getSession()
   repository.setProcurementDataset("YEAR-2026")
   await repository.upsertProcurementRecord({ requestId: "REQ-1" }, "edit")
@@ -47,5 +47,5 @@ test("backend melaporkan kontrak penyimpanan yang sama dengan frontend", async (
   vm.runInContext(backend, context)
   context.procurementActor_ = () => ({ email: "test@example.com", name: "Test" })
   context.getSpreadsheet_ = () => ({ getId: () => "test-sheet" })
-  assert.equal(context.procurementSession_({}).data.masterWriteContract, "nomor-request-memo-pembelian-v1")
+  assert.equal(context.procurementSession_({}).data.masterWriteContract, "procurement-vendor-offers-v2")
 })

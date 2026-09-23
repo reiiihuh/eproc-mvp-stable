@@ -73,3 +73,68 @@ test("legacy and renamed spreadsheet headers retain requestor, prices, and parti
     assert.equal(records[0].offers[0].winner, true)
   }
 })
+
+function memorySheet(initial) {
+  const grid = initial.map(row => [...row])
+  const sheet = {
+    getLastColumn: () => Math.max(...grid.map(row => row.length)),
+    getLastRow: () => grid.length,
+    getDataRange: () => ({ getValues: () => grid.map(row => [...row]), getDisplayValues: () => grid.map(row => row.map(String)) }),
+    getRange(row, column, height = 1, width = 1) {
+      const range = {
+        getDisplayValues: () => Array.from({ length: height }, (_, r) => Array.from({ length: width }, (_, c) => String(grid[row + r - 1]?.[column + c - 1] ?? ""))),
+        setValues(values) { values.forEach((cells, r) => cells.forEach((value, c) => { grid[row + r - 1] ??= []; grid[row + r - 1][column + c - 1] = value })); return range },
+        setValue(value) { return range.setValues([[value]]) },
+        clearContent() { return range.setValues(Array.from({ length: height }, () => Array(width).fill(""))) },
+      }
+      return range
+    },
+  }
+  return { grid, sheet }
+}
+
+function storageBackend(sheet) {
+  const backend = vm.createContext({})
+  vm.runInContext(backendSourceForStorage, backend)
+  backend.getSpreadsheet_ = () => ({ getSheetByName: () => sheet })
+  return backend
+}
+const backendSourceForStorage = backend
+const offerHeaders = ["Request ID", "Vendor", "Penawaran Awal", "Penawaran Akhir", "Pemenang"]
+const dataset = { offersSheet: "PENAWARAN VENDOR 2026" }
+const participants = [
+  { vendor: "A", initialOffer: 100, finalOffer: 80, taxRate: 0.11, winner: true },
+  { vendor: "B", initialOffer: 200, finalOffer: 170, taxRate: 0.11, winner: false },
+  { vendor: "C", initialOffer: 300, finalOffer: 250, taxRate: 0.11, winner: false },
+]
+
+test("saving more vendors than existing bottom rows does not overwrite reused rows", () => {
+  const { sheet, grid } = memorySheet([offerHeaders, ["OTHER", "Other", 5, 4, "Ya"], ["REQ-1", "Old", 10, 8, "Ya"]])
+  const storage = storageBackend(sheet)
+  storage.procurementReplaceOffers_({ requestId: "REQ-1", offers: participants }, dataset)
+  assert.deepEqual(grid.slice(2).map(row => row[1]), ["A", "B", "C"])
+  assert.equal(grid[1][1], "Other")
+  const records = [{ recordUid: "record", requestId: "REQ-1", offers: [{ vendor: "Stale master vendor" }] }]
+  parser.exports.mergeDynamicOffers({ Sheets: { "PENAWARAN VENDOR": XLSX.utils.aoa_to_sheet(grid) } }, records)
+  assert.deepEqual(Array.from(records[0].offers, offer => [offer.vendor, offer.initialOffer, offer.finalOffer, offer.winner]), [["A", 100, 80, true], ["B", 200, 170, false], ["C", 300, 250, false]])
+  storage.procurementReplaceOffers_({ requestId: "REQ-1", offers: participants.slice(0, 1) }, dataset)
+  assert.equal(grid.filter(row => row[0] === "REQ-1").length, 1)
+})
+
+test("missing offer sheet fails explicitly rather than reporting a successful save", () => {
+  const storage = storageBackend(null)
+  assert.throws(() => storage.procurementReplaceOffers_({ requestId: "REQ-1", offers: participants }, dataset), /SHEET_NOT_FOUND.*PENAWARAN VENDOR 2026/)
+})
+
+test("missing price headers are created and values are persisted", () => {
+  const { sheet, grid } = memorySheet([["Request ID", "Vendor"]])
+  storageBackend(sheet).procurementReplaceOffers_({ requestId: "REQ-1", offers: participants }, dataset)
+  assert.equal(grid[1][grid[0].indexOf("Penawaran Akhir")], 80)
+  assert.equal(grid[3][grid[0].indexOf("Penawaran Awal")], 300)
+})
+
+test("legacy master participant columns update and removed participants are cleared", () => {
+  const headers = ["Vendor 1", "Penawaran Vendor 1 ", "Nego Harga Vendor 1", "Vendor 2", "Penawaran Vendor 2", "Nego Harga Vendor 2", "Item"]
+  const patches = context.procurementLegacyOfferPatches_(headers, participants.slice(0, 1))
+  assert.deepEqual(JSON.parse(JSON.stringify(patches)), { "Vendor 1": "A", "Penawaran Vendor 1 ": 100, "Nego Harga Vendor 1": 80, "Vendor 2": "", "Penawaran Vendor 2": "", "Nego Harga Vendor 2": "" })
+})
