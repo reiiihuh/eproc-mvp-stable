@@ -30,9 +30,10 @@ import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
 import { Toaster } from "@/components/ui/sonner"
 import { AppsScriptWorkspaceAdapter } from "@/lib/apps-script-workspace"
 import { downloadBlob } from "@/lib/browser-download"
-import { requestDriveToken } from "@/lib/google-drive"
+import { requestDriveToken, uploadProcurementDocument } from "@/lib/google-drive"
+import type { PortalReviewRequest } from "@/lib/portal-review-types"
 import { defaultSettings, XlsxWorkspaceAdapter } from "@/lib/procurement-data"
-import type { ProcurementDataset, ProcurementPic, ProcurementRecord, ProcurementVendor, ProcurementWorkspace, TenderOffer } from "@/lib/procurement-types"
+import type { ProcurementDataset, ProcurementDocument, ProcurementPic, ProcurementRecord, ProcurementVendor, ProcurementWorkspace, TenderOffer } from "@/lib/procurement-types"
 import { STATUS_ORDER } from "@/lib/procurement-types"
 
 type MasterSortKey = "requestId" | "description" | "status" | "requestDate" | "picName" | "selectedVendor" | "poNumber" | "poDate" | "poAmountIncl" | "efficiency" | "budget"
@@ -43,7 +44,7 @@ const legacyDatasetFallback: ProcurementDataset = { key: "LEGACY", year: current
 const demoRecords: ProcurementRecord[] = [
   { recordUid: "demo-001", requestId: "PROC-2026-0001", originalRequestId: "RFP/IT/001", requestDate: "2026-01-08", status: "Complete", picName: "Danny Adi Saputra", division: "IT Strategy & GRC", position: "Department Head", email: "danny@example.com", location: "Head Office", requestType: "Project", itemName: "Managed Security Monitoring", description: "Layanan monitoring keamanan 24x7.", quantity: 1, category: "Subscription", requestKind: "Renewal", procurementMethod: "Pemilihan Langsung", budget: 700000000, budgetCode: "IT-SEC-2026", selectedVendor: "Vendor Beta", poNumber: "PO-IT-2026-0001", poDate: "2026-02-14", memoDate: "2026-01-10", directorApprovalDate: "2026-01-14", fpcSentDate: "2026-01-20", fpcApprovalDate: "2026-01-24", poAmountExcl: 623500000, poAmountIncl: 692085000, efficiency: 16500000, currency: "IDR", offers: [], documents: [] },
   { recordUid: "demo-002", requestId: "PROC-2026-0002", requestDate: "2026-03-12", status: "Ongoing", picName: "Robby", division: "Data & Analytics", position: "Product Owner", email: "robby@example.com", location: "Head Office", requestType: "Project", itemName: "Customer Analytics Platform", description: "Pengembangan platform analitik dan integrasi data.", quantity: 1, category: "Software", requestKind: "New", procurementMethod: "Pemilihan Langsung", budget: 2600000000, budgetCode: "IT-DNA-2026", selectedVendor: "", poNumber: "", poAmountExcl: 0, poAmountIncl: 0, efficiency: 0, currency: "IDR", offers: [], documents: [] },
-  { recordUid: "demo-003", requestId: "PROC-2026-0003", requestDate: "2026-07-03", status: "Upcoming", picName: "Santo", division: "IT Operations", position: "Section Head", email: "santo@example.com", location: "Head Office", requestType: "Renewal", itemName: "Compliance Assessment 2026", description: "Assessment tahunan sistem kritikal.", quantity: 1, category: "Jasa", requestKind: "Renewal", procurementMethod: "Pemilihan Langsung", budget: 250000000, budgetCode: "IT-GRC-2026", selectedVendor: "", poNumber: "", poAmountExcl: 0, poAmountIncl: 0, efficiency: 0, currency: "IDR", offers: [], documents: [] },
+  { recordUid: "demo-003", requestId: "PROC-2026-0003", requestDate: "2026-07-03", status: "Ongoing", picName: "Santo", division: "IT Operations", position: "Section Head", email: "santo@example.com", location: "Head Office", requestType: "Renewal", itemName: "Compliance Assessment 2026", description: "Assessment tahunan sistem kritikal.", quantity: 1, category: "Jasa", requestKind: "Renewal", procurementMethod: "Pemilihan Langsung", budget: 250000000, budgetCode: "IT-GRC-2026", selectedVendor: "", poNumber: "", poAmountExcl: 0, poAmountIncl: 0, efficiency: 0, currency: "IDR", offers: [], documents: [] },
 ]
 const demoPics: ProcurementPic[] = [{ id: "demo-pic-1", name: "Danny Adi Saputra", division: "IT Strategy & GRC", position: "Department Head", email: "danny@example.com", location: "Head Office", active: true }, { id: "demo-pic-2", name: "Robby", division: "Data & Analytics", position: "Product Owner", email: "robby@example.com", location: "Head Office", active: true }, { id: "demo-pic-3", name: "Santo", division: "IT Operations", position: "Section Head", email: "santo@example.com", location: "Head Office", active: true }]
 const initialWorkspace: ProcurementWorkspace = { version: 1, importedAt: "", sourceName: "Demo workspace", settings: defaultSettings, pics: demoPics, vendors: [], scorecards: [{ id: "starter-scorecard", projectName: "", requestId: "", scoringDate: "", evaluator: "", scheme: "normalized", technicalWeight: 70, commercialWeight: 30, technicalMaxScore: 100, commercialMaxScore: 100, includeApproval: false, vendors: [{ id: "starter-vendor-1", name: "", initialPrice: 0, finalPrice: 0, technicalScore: 0, notes: "" }, { id: "starter-vendor-2", name: "", initialPrice: 0, finalPrice: 0, technicalScore: 0, notes: "" }] }], records: demoRecords }
@@ -60,7 +61,7 @@ function initialWorkspaceState(): ProcurementWorkspace {
 }
 
 const emptyOffer = (): TenderOffer => ({ id: crypto.randomUUID(), vendor: "", initialOffer: 0, finalOffer: 0, taxRate: 0.11, technicalPass: true, winner: false })
-const blankDraft = (): ProcurementRecord => ({ recordUid: crypto.randomUUID(), requestId: "", requestDate: new Date().toISOString().slice(0, 10), status: "Upcoming", picName: "", division: "", position: "", email: "", location: "Head Office", requestType: "Project", itemName: "", description: "", quantity: 1, category: "", requestKind: "", procurementMethod: "", budget: 0, budgetCode: "", selectedVendor: "", poNumber: "", poAmountExcl: 0, poAmountIncl: 0, efficiency: 0, currency: "IDR", offers: [], documents: [] })
+const blankDraft = (): ProcurementRecord => ({ recordUid: crypto.randomUUID(), requestId: "", requestDate: new Date().toISOString().slice(0, 10), status: "Ongoing", picName: "", division: "", position: "", email: "", location: "Head Office", requestType: "Project", itemName: "", description: "", quantity: 1, category: "", requestKind: "", procurementMethod: "", budget: 0, budgetCode: "", memoNumber: "", selectedVendor: "", poNumber: "", poAmountExcl: 0, poAmountIncl: 0, efficiency: 0, currency: "IDR", offers: [], documents: [] })
 const procurementTitle = (record: ProcurementRecord) => record.description || record.itemName || "Tanpa deskripsi"
 const compactMoney = (value: number, currency = "IDR") => `${currency === "IDR" ? "Rp" : currency} ${compact.format(value)}`
 const currencyBreakdown = (records: ProcurementRecord[], key: "poAmountIncl" | "efficiency") => {
@@ -90,9 +91,11 @@ export default function ProcurementApp({ auth }: { auth: AuthenticatedProcuremen
   const [selectedRecords, setSelectedRecords] = useState<string[]>([])
   const [reportOpen, setReportOpen] = useState(false)
   const [driveToken, setDriveToken] = useState("")
+  const [pendingDocumentFiles, setPendingDocumentFiles] = useState<Record<string, File>>({})
   const [sheetConnection, setSheetConnection] = useState<SheetConnection>(null)
   const [operation, setOperation] = useState<OperationState>({ open: false, title: "", message: "", step: 0, total: 1, state: "working" })
   const [reviewCount, setReviewCount] = useState(0)
+  const [reviewQueue, setReviewQueue] = useState<PortalReviewRequest[]>([])
   const [datasets, setDatasets] = useState<ProcurementDataset[]>([])
   const [selectedDatasetKey, setSelectedDatasetKey] = useState("")
   const fileInput = useRef<HTMLInputElement>(null)
@@ -105,7 +108,7 @@ export default function ProcurementApp({ auth }: { auth: AuthenticatedProcuremen
     for (const key of ["large-text", "high-contrast", "reduce-motion"]) document.documentElement.classList.toggle(key, window.localStorage.getItem(`procurement-sheets-lab.${key}`) === "true")
   }, [])
   useEffect(() => {
-    const refresh = () => Promise.all([auth.repository.listReviewQueue().then((items) => setReviewCount(items.length)), auth.repository.flushPendingStatusSyncs()]).catch(() => undefined)
+    const refresh = () => Promise.all([auth.repository.listReviewQueue().then((items) => { setReviewQueue(items); setReviewCount(items.length) }), auth.repository.flushPendingStatusSyncs()]).catch(() => undefined)
     void refresh()
     const seconds = workspace.settings.autoRefreshSeconds ?? 30
     const timer = seconds ? window.setInterval(refresh, seconds * 1000) : undefined
@@ -229,11 +232,13 @@ export default function ProcurementApp({ auth }: { auth: AuthenticatedProcuremen
     finally { if (fileInput.current) fileInput.current.value = "" }
   }
   function updateDraft<K extends keyof ProcurementRecord>(key: K, value: ProcurementRecord[K]) { setDraft((current) => { const next = { ...current, [key]: value }; return key === "offers" || key === "procurementMethod" ? syncWinnerToPo(next, current.offers.some((offer) => offer.winner)) : next }) }
+  function stageDocumentFile(documentId: string, file: File | null) { setPendingDocumentFiles((current) => { const next = { ...current }; if (file) next[documentId] = file; else delete next[documentId]; return next }) }
   function selectPic(pic: ProcurementPic) { setDraft((current) => ({ ...current, picName: pic.name, division: pic.division, position: pic.position, email: pic.email, location: pic.location })) }
   function changeOffer(index: number, patch: Partial<TenderOffer>) { updateDraft("offers", draft.offers.map((offer, offerIndex) => patch.winner && offerIndex !== index ? { ...offer, winner: false } : offerIndex === index ? { ...offer, ...patch } : offer)) }
 
   function openLatestRecordForEdit(record: ProcurementRecord) {
     // Snapshot sudah disinkronkan berkala; validasi baris terbaru tetap dilakukan backend saat Simpan.
+    setPendingDocumentFiles({})
     setDraft(structuredClone(record))
     setEditMode("edit")
     setDialogOpen(true)
@@ -259,10 +264,30 @@ export default function ProcurementApp({ auth }: { auth: AuthenticatedProcuremen
     const winner = vendorOffers.find((offer) => offer.winner)
     const poAmountExcl = winner?.finalOffer ?? draft.poAmountExcl
     const initialPriceExcl = winner?.initialOffer ?? draft.initialPriceExcl ?? 0
-    const saved: ProcurementRecord = { ...draft, initialPriceExcl, offers: vendorOffers, documents: draft.documents.filter((document) => document.name || document.webViewLink), requestId: editMode === "edit" ? draft.requestId : "", selectedVendor: winner?.vendor ?? draft.selectedVendor, poAmountExcl, poAmountIncl: poAmountExcl * 1.11, efficiency: Math.max(0, initialPriceExcl - poAmountExcl) * 1.11 }
+    const poDocument = draft.documents.find((document) => document.type.toUpperCase() === "PO")
+    const status = draft.status === "Complete" || draft.poNumber || draft.poDate || poDocument?.name || poDocument?.webViewLink ? "Complete" : draft.status
+    if (status === "Complete" && (!draft.poNumber.trim() || !draft.poDate)) { toast.error("Nomor PO dan Tanggal PO wajib diisi untuk status Complete."); return }
+    const saved: ProcurementRecord = { ...draft, status, initialPriceExcl, offers: vendorOffers, documents: draft.documents.filter((document) => document.name || document.webViewLink), requestId: editMode === "edit" ? draft.requestId : "", selectedVendor: winner?.vendor ?? draft.selectedVendor, poAmountExcl, poAmountIncl: poAmountExcl * 1.11, efficiency: Math.max(0, initialPriceExcl - poAmountExcl) * 1.11 }
     showOperation(editMode === "edit" ? "Memperbarui pengadaan" : "Menambah pengadaan", "Menulis langsung ke master spreadsheet", 3)
+    let createdRecord: ProcurementRecord | null = null
+    let recoveryRecord: ProcurementRecord | null = null
     try {
-      const persisted = await backendWorkspace.upsertProcurement(saved, editMode)
+      let persisted = editMode === "create" ? await backendWorkspace.upsertProcurement(saved, "create") : saved
+      if (editMode === "create") createdRecord = persisted
+      const staged = persisted.documents.filter((document) => pendingDocumentFiles[document.id])
+      if (staged.length) {
+        showOperation("Mengunggah dokumen", `Mengunggah ${staged.length} file ke Google Drive`, 3)
+        const token = await googleToken()
+        const uploaded = new Map<string, ProcurementDocument>()
+        await Promise.all(staged.map(async (document) => {
+          const result = await uploadProcurementDocument(token, workspace.settings.driveRootFolder || "Pengadaan IT", persisted.requestId, persisted.itemName, pendingDocumentFiles[document.id]) as { id: string; name: string; webViewLink?: string }
+          uploaded.set(document.id, { ...document, driveFileId: result.id, name: result.name, webViewLink: result.webViewLink, state: "uploaded" })
+        }))
+        persisted = { ...persisted, documents: persisted.documents.map((document) => uploaded.get(document.id) || document) }
+        recoveryRecord = persisted
+        setPendingDocumentFiles((current) => { const next = { ...current }; staged.forEach((document) => delete next[document.id]); return next })
+      }
+      if (editMode === "edit" || staged.length) persisted = await backendWorkspace.upsertProcurement(persisted, "edit")
       setWorkspace((current) => ({ ...current, records: editMode === "edit" ? current.records.map((record) => record.recordUid === persisted.recordUid ? persisted : record) : [...current.records, persisted] }))
       const portalId = persisted.originalRequestId || persisted.requestId
       if (portalId.startsWith("NPR-")) {
@@ -270,9 +295,17 @@ export default function ProcurementApp({ auth }: { auth: AuthenticatedProcuremen
         try { await auth.repository.syncProcurementStatus(portalId, persisted.status, persisted.poNumber, poUrl) } catch { toast.warning("Master tersimpan, sinkron status portal akan dicoba ulang.") }
       }
       finishOperation("MASTER DATABASE PENGADAAN sudah diperbarui")
-      setDialogOpen(false); setDraft(blankDraft()); setEditMode("create")
+      setDialogOpen(false); setDraft(blankDraft()); setEditMode("create"); setPendingDocumentFiles({})
       toast.success(`${persisted.requestId} berhasil disimpan.`)
-    } catch (error) { failOperation(error instanceof Error ? error.message : "Perubahan gagal disimpan.") }
+    } catch (error) {
+      if (createdRecord || recoveryRecord) {
+        const recoverable = recoveryRecord || createdRecord!
+        setDraft(recoverable)
+        setEditMode("edit")
+        toast.warning(`${recoverable.requestId} aman sebagai mode edit. Perbaiki kendalanya lalu simpan ulang; record baru tidak akan dibuat.`)
+      }
+      failOperation(error instanceof Error ? error.message : "Perubahan gagal disimpan.")
+    }
   }
 
   async function deleteRecord() {
@@ -297,10 +330,10 @@ export default function ProcurementApp({ auth }: { auth: AuthenticatedProcuremen
 
   return <SidebarProvider style={{ "--sidebar-width-icon": "4rem" } as CSSProperties}>
     <ProcurementSidebar view={view} setView={setView} navItems={navItems} auth={auth} />
-    <SidebarInset className="min-w-0 bg-[#f4f8fc]"><header className="sticky top-0 z-20 flex h-17 items-center justify-between border-b border-blue-100 bg-white/92 px-4 backdrop-blur-xl md:px-7"><div className="flex min-w-0 items-center gap-3"><ProcurementSidebarToggle /><div className="min-w-0"><h1 className="truncate font-display text-lg font-bold text-[#082f63] md:text-xl">{navItems.find((item) => item.id === view)?.label}</h1><p className="truncate text-xs text-slate-500">{workspace.sourceName} · {workspace.records.length} record · Apps Script live</p></div></div><NotificationCenter records={workspace.records} onOpenRecord={(record) => { setSearch(record.requestId); setMasterYearFilter("all"); setStatusFilter("all"); setView("master") }} /></header>
+    <SidebarInset className="min-w-0 bg-[#f4f8fc]"><header className="sticky top-0 z-20 flex h-17 items-center justify-between border-b border-blue-100 bg-white/92 px-4 backdrop-blur-xl md:px-7"><div className="flex min-w-0 items-center gap-3"><ProcurementSidebarToggle /><div className="min-w-0"><h1 className="truncate font-display text-lg font-bold text-[#082f63] md:text-xl">{navItems.find((item) => item.id === view)?.label}</h1><p className="truncate text-xs text-slate-500">{workspace.sourceName} · {workspace.records.length} record · Apps Script live</p></div></div><NotificationCenter records={workspace.records} reviewQueue={reviewQueue} onOpenReview={() => setView("review")} onOpenRecord={(record) => { setSearch(record.requestId); setMasterYearFilter("all"); setStatusFilter("all"); setView("master") }} /></header>
       <main className="min-w-0 p-4 md:p-7">
         {view === "dashboard" && <ProcurementDashboard year={year} years={years} setYear={setYear} requestRecords={requestYearRecords} statusData={statusData} monthlyData={monthlyData} expenseDisplay={expenseDisplay} efficiencyDisplay={efficiencyDisplay} goMaster={() => setView("master")} openReport={() => setReportOpen(true)} />}
-        {view === "review" && <DocumentReview repository={auth.repository} onQueueChange={setReviewCount} />}
+        {view === "review" && <DocumentReview repository={auth.repository} onQueueChange={(items) => { setReviewQueue(items); setReviewCount(items.length) }} />}
         {view === "master" && <div className="mx-auto max-w-[1600px] space-y-5"><section className="grid gap-3 rounded-2xl border border-slate-200 bg-white p-4 xl:grid-cols-[minmax(260px,1fr)_170px_170px_230px_150px_auto]"><div className="relative"><Search className="absolute left-3 top-2.5 size-4 text-slate-400" /><Input value={search} onChange={(event) => { setSearch(event.target.value); setMasterPage(1) }} placeholder="Cari semua data pengadaan..." className="border-slate-200 pl-9" /></div><Select value={masterYearFilter} onValueChange={(value) => { setMasterYearFilter(value); setMasterPage(1) }}><SelectTrigger className="w-full"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Semua tahun</SelectItem>{years.map((value) => <SelectItem value={String(value)} key={value}>Tahun {value}</SelectItem>)}</SelectContent></Select><Select value={statusFilter} onValueChange={(value) => { setStatusFilter(value); setMasterPage(1) }}><SelectTrigger className="w-full"><ListFilter /><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">Semua status</SelectItem>{STATUS_ORDER.map((status) => <SelectItem value={status} key={status}>{status}</SelectItem>)}</SelectContent></Select><Select value={masterSortKey} onValueChange={(value) => setMasterSortKey(value as MasterSortKey)}><SelectTrigger className="w-full"><ArrowDownUp /><SelectValue /></SelectTrigger><SelectContent>{masterSortOptions.map((option) => <SelectItem value={option.value} key={option.value}>Urut: {option.label}</SelectItem>)}</SelectContent></Select><Button variant="outline" onClick={() => setMasterSortDirection((current) => current === "asc" ? "desc" : "asc")}><ArrowDownUp />{masterSortDirection === "asc" ? "Naik / A–Z" : "Turun / Z–A"}</Button><Button variant="outline" className="text-rose-600" disabled={!selectedRecords.length} onClick={() => setPendingBatchDelete(workspace.records.filter((record) => selectedRecords.includes(record.recordUid)))}><Trash2 /> Hapus {selectedRecords.length || "batch"}</Button></section><div className="flex justify-end"><Button className="bg-[#082f63] text-white hover:bg-[#174a7d]" onClick={() => { setDraft(blankDraft()); setEditMode("create"); setDialogOpen(true) }}><Plus /> Tambah Pengadaan</Button></div><div className="flex flex-wrap items-center justify-between gap-2 text-sm text-slate-500"><span>Menampilkan <strong className="text-slate-800">{visibleMasterRecords.length}</strong> dari {filteredRecords.length} record.</span><div className="flex items-center gap-2"><Select value={String(masterPageSize)} onValueChange={(value) => { const size = Number(value) as 10 | 25 | 50 | 100; setMasterPageSize(size); setMasterPage(1); setWorkspace((current) => ({ ...current, settings: { ...current.settings, defaultPageSize: size } })) }}><SelectTrigger className="w-24 bg-white"><SelectValue /></SelectTrigger><SelectContent>{[10, 25, 50, 100].map((size) => <SelectItem key={size} value={String(size)}>{size}</SelectItem>)}</SelectContent></Select><Button variant="outline" size="sm" disabled={masterPage <= 1} onClick={() => setMasterPage((value) => value - 1)}>Sebelumnya</Button><span>{Math.min(masterPage, masterPageCount)}/{masterPageCount}</span><Button variant="outline" size="sm" disabled={masterPage >= masterPageCount} onClick={() => setMasterPage((value) => value + 1)}>Berikutnya</Button></div></div><div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm"><ProcurementTable records={visibleMasterRecords} extended onEdit={(record) => { void openLatestRecordForEdit(record) }} onDelete={setPendingDelete} selected={selectedRecords} setSelected={setSelectedRecords} /></div></div>}
         {view === "pics" && <PicMasterView pics={workspace.pics} onSave={savePic} onDelete={deletePic} onDeleteMany={deletePics} />}
         {view === "vendors" && <VendorMasterView vendors={workspace.vendors} onSave={saveVendor} onDelete={deleteVendor} onDeleteMany={deleteVendors} />}
@@ -311,7 +344,7 @@ export default function ProcurementApp({ auth }: { auth: AuthenticatedProcuremen
         {view === "settings" && <><input ref={fileInput} type="file" accept=".xlsx,.xls" className="hidden" onChange={(event) => importFile(event.target.files?.[0])} /><ProcurementSettings workspace={workspace} setWorkspace={setWorkspace} sheetConnection={sheetConnection} pageSize={masterPageSize} setPageSize={(size) => { setMasterPageSize(size); setMasterPage(1) }} exportXlsx={() => { downloadBlob(new XlsxWorkspaceAdapter().export(workspace), `Master_Pengadaan_${new Date().toISOString().slice(0, 10)}.xlsx`); toast.success("Master spreadsheet berhasil dibuat.") }} exportJson={() => downloadBlob(new Blob([JSON.stringify(workspace, null, 2)], { type: "application/json" }), `Procurement_Workspace_${new Date().toISOString().slice(0, 10)}.json`)} openReport={() => setReportOpen(true)} importXlsx={() => fileInput.current?.click()} datasets={datasets} selectedDatasetKey={selectedDatasetKey} onSelectDataset={selectDataset} onPrepareDataset={prepareDataset} onActivateDataset={activateDataset} onArchiveDataset={archiveDataset} onResetSandbox={resetSandbox} /></>}
       </main>
     </SidebarInset>
-    <AddProcurementDialog open={dialogOpen} setOpen={setDialogOpen} draft={draft} pics={workspace.pics} vendors={workspace.vendors} categories={categories} updateDraft={updateDraft} selectPic={selectPic} changeOffer={changeOffer} save={saveDraft} emptyOffer={emptyOffer} mode={editMode} />
+    <AddProcurementDialog open={dialogOpen} setOpen={(next) => { setDialogOpen(next); if (!next) setPendingDocumentFiles({}) }} draft={draft} pics={workspace.pics} vendors={workspace.vendors} categories={categories} updateDraft={updateDraft} selectPic={selectPic} changeOffer={changeOffer} save={saveDraft} emptyOffer={emptyOffer} stageDocumentFile={stageDocumentFile} mode={editMode} />
     <ReportExportDialog open={reportOpen} setOpen={setReportOpen} records={workspace.records} />
     <AlertDialog open={Boolean(pendingDelete)} onOpenChange={(open) => { if (!open) setPendingDelete(null) }}><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Hapus pengadaan ini?</AlertDialogTitle><AlertDialogDescription><strong className="break-all text-slate-900">{pendingDelete?.requestId}</strong> beserta relasi penawaran dan dokumennya akan dihapus dari master database.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Batal</AlertDialogCancel><AlertDialogAction className="bg-rose-600 hover:bg-rose-700" onClick={deleteRecord}>Hapus Pengadaan</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
     <AlertDialog open={Boolean(pendingBatchDelete.length)} onOpenChange={(open) => { if (!open) setPendingBatchDelete([]) }}><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Hapus {pendingBatchDelete.length} pengadaan?</AlertDialogTitle><AlertDialogDescription>Semua baris terpilih dan relasi penawarannya akan dihapus langsung dari master database.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel>Batal</AlertDialogCancel><AlertDialogAction className="bg-rose-600 hover:bg-rose-700" onClick={() => void deleteRecords(pendingBatchDelete)}>Hapus Semua</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>

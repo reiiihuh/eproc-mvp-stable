@@ -109,9 +109,9 @@ const normalizeStatus = (value: unknown): ProcurementStatus => {
   const status = asText(value).toLowerCase()
   if (["selesai", "complete", "completed", "done"].includes(status)) return "Complete"
   if (status === "ongoing" || status === "in progress") return "Ongoing"
-  if (status === "po") return "PO"
+  if (status === "po") return "Complete"
   if (status === "dropped" || status === "cancelled") return "Dropped"
-  return "Upcoming"
+  return "Ongoing"
 }
 const fnv = (input: string) => {
   let hash = 2166136261
@@ -269,6 +269,7 @@ function parseMaster(sheet: XLSX.WorkSheet) {
     const currency: ProcurementRecord["currency"] = currencyHint.includes("SGD") || currencyHint.includes("S$") ? "SGD" : currencyHint.includes("USD") || currencyHint.includes("US$") ? "USD" : "IDR"
     const seed = [originalRequestId, itemName, requestDate, sourceRow].join("|")
     const documentPairs = [
+      ["MEMO PEMBELIAN", "Nomor Memo Pembelian", "Link Memo Pembelian"],
       ["PKS", "PKS", "Link PKS"], ["Memo Izin/Internal", "Memo Izin Prinsip/ Memo Internal", "Link IZIn"],
       ["FPB", "FPB", "Link FPB"], ["RFP", "RFP", "Link RFP"], ["Form Peripheral", "Form Peripheral", "Link Perip"],
       ["SPB", "SPB", "Link SPB"], ["IT Support", "Konfirmasi IT Support", "Link IT"],
@@ -308,6 +309,7 @@ function parseMaster(sheet: XLSX.WorkSheet) {
       budget: asNumber(item["Budget"]),
       budgetType: (asText(item["Jenis Budget"] ?? item["Budget Type"]).toUpperCase() || undefined) as ProcurementRecord["budgetType"],
       budgetCode: asText(item["Kode Budget"]),
+      memoNumber: asText(firstValue(item, ["Nomor Memo Pembelian", "Nomor Memo", "Memo Pembelian"])),
       selectedVendor: asText(item["Vendor Terpilih"]),
       poNumber: asText(item["Nomor PO"]),
       poDate: excelDate(item["Tanggal PO"]),
@@ -453,6 +455,7 @@ export class XlsxWorkspaceAdapter implements WorkspaceAdapter {
       Metode: record.procurementMethod,
       Budget: record.budget,
       "Jenis Budget": record.budgetType ?? "",
+      "Nomor Memo Pembelian": record.memoNumber ?? "",
       "Vendor Terpilih": record.selectedVendor,
       "Nomor PO": record.poNumber,
       PeriodeAwal: formatIndonesianDate(record.periodStart),

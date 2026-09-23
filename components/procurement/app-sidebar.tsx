@@ -1,7 +1,7 @@
 "use client"
 
 import Image from "next/image"
-import { useEffect, useState } from "react"
+import { useState } from "react"
 import { ChevronDown, LogOut, PanelLeftClose, PanelLeftOpen, type LucideIcon } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
@@ -25,11 +25,6 @@ export function ProcurementSidebar({ view, setView, navItems, auth }: { view: Pr
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(() => Object.fromEntries(navGroups.map((group) => [group.label, group.ids.includes(view)])))
   const dashboard = navItems.find((item) => item.id === "dashboard")
 
-  useEffect(() => {
-    const activeGroup = navGroups.find((group) => group.ids.includes(view))
-    if (activeGroup) setOpenGroups((current) => ({ ...current, [activeGroup.label]: true }))
-  }, [view])
-
   const selectView = (next: ProcurementView) => {
     setView(next)
     if (isMobile) setOpenMobile(false)
@@ -48,11 +43,11 @@ export function ProcurementSidebar({ view, setView, navItems, auth }: { view: Pr
               const active = items.some((item) => item.id === view)
               const GroupIcon = items[0]?.icon
               if (!items.length || !GroupIcon) return null
-              return <Collapsible key={group.label} open={Boolean(openGroups[group.label])} onOpenChange={(open) => setOpenGroups((current) => ({ ...current, [group.label]: open }))} asChild>
+              return <Collapsible key={group.label} open={active || Boolean(openGroups[group.label])} onOpenChange={(open) => setOpenGroups((current) => ({ ...current, [group.label]: open }))} asChild>
                 <SidebarMenuItem className="group/collapsible">
-                  <CollapsibleTrigger asChild><SidebarMenuButton tooltip={group.label} onClick={() => { if (state === "collapsed") setOpen(true) }} className={active ? "bg-white/10 font-semibold text-white" : "text-white/75 hover:bg-white/10 hover:text-white"}><GroupIcon /><span>{group.label}</span><ChevronDown className="ml-auto transition-transform duration-200 group-data-[state=open]/collapsible:rotate-180" /></SidebarMenuButton></CollapsibleTrigger>
-                  <CollapsibleContent><SidebarMenuSub>{items.map((item) => <SidebarMenuSubItem key={item.id}><SidebarMenuSubButton href="#" isActive={view === item.id} onClick={(event) => { event.preventDefault(); selectView(item.id) }} className="h-8 text-white/65 hover:bg-white/10 hover:text-white data-[active=true]:bg-[#73d94b] data-[active=true]:font-semibold data-[active=true]:text-[#082f63]"><item.icon /><span>{item.label}</span>{Boolean(item.badge) && <span className="ml-auto rounded-full bg-rose-500 px-1.5 text-[10px] font-bold leading-5 text-white">{item.badge! > 99 ? "99+" : item.badge}</span>}</SidebarMenuSubButton></SidebarMenuSubItem>)}</SidebarMenuSub></CollapsibleContent>
-                  {Boolean(items.reduce((total, item) => total + (item.badge || 0), 0)) && <SidebarMenuBadge className="bg-rose-500 text-white">{Math.min(99, items.reduce((total, item) => total + (item.badge || 0), 0))}</SidebarMenuBadge>}
+                  <CollapsibleTrigger asChild><SidebarMenuButton tooltip={group.label} onClick={() => { if (state === "collapsed") setOpen(true) }} className={`${active ? "bg-white/10 font-semibold text-white" : "text-white/75 hover:bg-white/10 hover:text-white"} pr-10 group-data-[collapsible=icon]:pr-2`}><GroupIcon /><span className="truncate">{group.label}</span><ChevronDown className="ml-auto shrink-0 transition-transform duration-200 group-data-[state=open]/collapsible:rotate-180" /></SidebarMenuButton></CollapsibleTrigger>
+                  <CollapsibleContent><SidebarMenuSub>{items.map((item) => <SidebarMenuSubItem key={item.id}><SidebarMenuSubButton href="#" isActive={view === item.id} onClick={(event) => { event.preventDefault(); selectView(item.id) }} className="h-9 min-w-0 gap-2 pr-2 text-white/65 hover:bg-white/10 hover:text-white data-[active=true]:bg-[#73d94b] data-[active=true]:font-semibold data-[active=true]:text-[#082f63]"><item.icon className="shrink-0" /><span className="min-w-0 flex-1 truncate">{item.label}</span>{Boolean(item.badge) && <span className="ml-2 grid min-w-5 shrink-0 place-items-center rounded-full bg-rose-500 px-1.5 text-[10px] font-bold leading-5 text-white">{item.badge! > 99 ? "99+" : item.badge}</span>}</SidebarMenuSubButton></SidebarMenuSubItem>)}</SidebarMenuSub></CollapsibleContent>
+                  {Boolean(items.reduce((total, item) => total + (item.badge || 0), 0)) && <SidebarMenuBadge className="right-7 min-w-5 bg-rose-500 px-1 text-center text-white group-data-[collapsible=icon]:right-0.5 group-data-[collapsible=icon]:top-0.5">{Math.min(99, items.reduce((total, item) => total + (item.badge || 0), 0))}</SidebarMenuBadge>}
                 </SidebarMenuItem>
               </Collapsible>
             })}

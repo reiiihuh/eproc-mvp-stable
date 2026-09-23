@@ -22,7 +22,7 @@ const displayStatus = (status: string) => status.replaceAll("_", " ")
 const alertSuccess = (title: string) => void Swal.fire({ icon: "success", title, showConfirmButton: false, timer: 1400, timerProgressBar: true, width: 360 })
 const alertError = (title: string) => void Swal.fire({ icon: "error", title, showConfirmButton: false, timer: 2600, timerProgressBar: true, width: 380 })
 
-export function DocumentReview({ repository, onQueueChange }: { repository: PortalReviewRepository; onQueueChange?: (count: number) => void }) {
+export function DocumentReview({ repository, onQueueChange }: { repository: PortalReviewRepository; onQueueChange?: (queue: PortalReviewRequest[]) => void }) {
   const [queue, setQueue] = useState<PortalReviewRequest[]>([])
   const [detail, setDetail] = useState<PortalReviewDetail | null>(null)
   const [decision, setDecision] = useState<Decision | "">("")
@@ -35,7 +35,7 @@ export function DocumentReview({ repository, onQueueChange }: { repository: Port
     try {
       const next = await repository.listReviewQueue()
       setQueue(next)
-      onQueueChange?.(next.length)
+      onQueueChange?.(next)
     } catch (error) { alertError(error instanceof Error ? error.message : "Review queue gagal dimuat.") }
     finally { setBusy("") }
   }, [onQueueChange, repository])

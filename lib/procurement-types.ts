@@ -131,6 +131,7 @@ export type ProcurementRecord = {
   budget: number
   budgetType?: ProcurementBudgetType
   budgetCode: string
+  memoNumber?: string
   selectedVendor: string
   poNumber: string
   poDate?: string
@@ -168,9 +169,7 @@ export type ProcurementWorkspace = {
 }
 
 export const STATUS_ORDER: ProcurementStatus[] = [
-  "Upcoming",
   "Ongoing",
-  "PO",
   "Complete",
   "Dropped",
 ]
