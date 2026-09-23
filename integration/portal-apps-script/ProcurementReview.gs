@@ -43,6 +43,9 @@ function tryProcurementRoute_(request) {
     case "procurement.deletepics": return procurementDeletePics_(body);
     case "procurement.upsertvendor": return procurementUpsertVendor_(body);
     case "procurement.deletevendors": return procurementDeleteVendors_(body);
+    case "listprocurementadmins": return procurementListAdmins_(body);
+    case "procurement.upsertadmin": return procurementUpsertAdmin_(body);
+    case "procurement.setadminactive": return procurementSetAdminActive_(body);
     default: return null;
   }
 }
@@ -52,7 +55,7 @@ function ensureProcurementPortalSchema() {
   var additions = {};
   additions[PORTAL_SHEETS_.requests] = ["MASTER_REQUEST_ID", "PO_NUMBER", "PO_URL", "REQUESTER_POSITION", "REQUESTER_LOCATION"];
   additions[PORTAL_SHEETS_.documents] = ["REVIEWED_AT", "REVIEWED_BY"];
-  additions[PORTAL_SHEETS_.users] = ["DIVISION", "POSITION", "LOCATION", "MASTER_PIC_ID", "PROFILE_COMPLETE"];
+  additions[PORTAL_SHEETS_.users] = ["DIVISION", "POSITION", "LOCATION", "MASTER_PIC_ID", "PROFILE_COMPLETE", "CREATED_BY", "UPDATED_BY"];
   Object.keys(additions).forEach(function (sheetName) {
     var sheet = getSpreadsheet_().getSheetByName(sheetName);
     if (!sheet) throw new Error("SHEET_NOT_FOUND: " + sheetName);
@@ -545,6 +548,86 @@ function procurementDeleteVendors_(body) {
   });
 }
 
+/** Manajemen akses admin. Tidak memakai shared secret; seluruh aksi wajib berasal dari admin aktif terverifikasi. */
+function procurementListAdmins_(body) {
+  var actor = procurementActor_(procurementBody_(body));
+  procurementEnsureAdminSchema_();
+  var admins = portalRows_(PORTAL_SHEETS_.users).filter(function (row) {
+    var role = String(row.ROLE || "").toUpperCase();
+    return role === "PROCUREMENT_ADMIN" || role === "PROCUREMENT_ADMIN_DISABLED";
+  }).map(procurementAdminAccountDto_);
+  admins.sort(function (a, b) {
+    if (a.email === actor.email) return -1;
+    if (b.email === actor.email) return 1;
+    return a.name.localeCompare(b.name);
+  });
+  return { ok: true, data: admins };
+}
+
+function procurementUpsertAdmin_(body) {
+  body = procurementBody_(body);
+  return portalWithLock_(function () {
+    var actor = procurementActor_(body);
+    procurementEnsureAdminSchema_();
+    var admin = body.admin || {};
+    var email = String(admin.email || "").trim().toLowerCase();
+    var name = String(admin.name || "").trim();
+    if (!name || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error("VALIDATION_ERROR: Nama dan email admin wajib diisi dengan benar.");
+    var actorDomain = String(actor.email || "").split("@")[1] || "";
+    var targetDomain = email.split("@")[1] || "";
+    if (!actorDomain || targetDomain !== actorDomain) throw new Error("ADMIN_DOMAIN_FORBIDDEN: Admin harus memakai domain organisasi yang sama.");
+    var active = admin.active !== false;
+    if (!active && email === actor.email) throw new Error("ADMIN_SELF_PROTECTED: Anda tidak dapat menonaktifkan akun sendiri.");
+    var existing = portalFind_(PORTAL_SHEETS_.users, "EMAIL", email, true);
+    var now = new Date();
+    var role = active ? "PROCUREMENT_ADMIN" : "PROCUREMENT_ADMIN_DISABLED";
+    if (existing) {
+      portalUpdateOne_(PORTAL_SHEETS_.users, "EMAIL", email, { DISPLAY_NAME: name, ROLE: role, ACTIVE: active, AUTH_PROVIDER: "GOOGLE", UPDATED_AT: now, UPDATED_BY: actor.email }, true);
+    } else {
+      portalAppend_(PORTAL_SHEETS_.users, { USER_ID: "PENDING-" + Utilities.getUuid(), EMAIL: email, DISPLAY_NAME: name, ROLE: role, ACTIVE: active, AUTH_PROVIDER: "GOOGLE", CREATED_AT: now, UPDATED_AT: now, CREATED_BY: actor.email, UPDATED_BY: actor.email });
+    }
+    SpreadsheetApp.flush();
+    return procurementListAdmins_(body);
+  });
+}
+
+function procurementSetAdminActive_(body) {
+  body = procurementBody_(body);
+  return portalWithLock_(function () {
+    var actor = procurementActor_(body);
+    procurementEnsureAdminSchema_();
+    var email = String(body.email || "").trim().toLowerCase();
+    var active = body.active === true;
+    var target = portalFind_(PORTAL_SHEETS_.users, "EMAIL", email, true);
+    var targetRole = String(target && target.ROLE || "").toUpperCase();
+    if (!target || ["PROCUREMENT_ADMIN", "PROCUREMENT_ADMIN_DISABLED"].indexOf(targetRole) < 0) throw new Error("ADMIN_NOT_FOUND: Akun admin tidak ditemukan.");
+    if (!active && email === actor.email) throw new Error("ADMIN_SELF_PROTECTED: Anda tidak dapat menonaktifkan akun sendiri.");
+    if (!active) {
+      var activeCount = portalRows_(PORTAL_SHEETS_.users).filter(function (row) { return String(row.ROLE || "").toUpperCase() === "PROCUREMENT_ADMIN" && portalTrue_(row.ACTIVE); }).length;
+      if (activeCount <= 1) throw new Error("LAST_ADMIN_PROTECTED: Admin aktif terakhir tidak dapat dinonaktifkan.");
+    }
+    portalUpdateOne_(PORTAL_SHEETS_.users, "EMAIL", email, { ROLE: active ? "PROCUREMENT_ADMIN" : "PROCUREMENT_ADMIN_DISABLED", ACTIVE: active, UPDATED_AT: new Date(), UPDATED_BY: actor.email }, true);
+    SpreadsheetApp.flush();
+    return procurementListAdmins_(body);
+  });
+}
+
+function procurementEnsureAdminSchema_() {
+  portalEnsureSheetHeaders_(PORTAL_SHEETS_.users, ["CREATED_BY", "UPDATED_BY"]);
+}
+
+function procurementAdminAccountDto_(row) {
+  return {
+    email: String(row.EMAIL || "").trim().toLowerCase(),
+    name: String(row.DISPLAY_NAME || row.EMAIL || ""),
+    active: String(row.ROLE || "").toUpperCase() === "PROCUREMENT_ADMIN" && portalTrue_(row.ACTIVE),
+    lastLoginAt: procurementIso_(row.LAST_LOGIN_AT),
+    createdAt: procurementIso_(row.CREATED_AT),
+    updatedAt: procurementIso_(row.UPDATED_AT),
+    updatedBy: String(row.UPDATED_BY || "")
+  };
+}
+
 function procurementEnsureSheetHeaders_(sheet, requiredHeader, additions) {
   var context = procurementSheetContext_(sheet, requiredHeader);
   additions.forEach(function (header) {
@@ -830,24 +913,33 @@ function procurementPromoteApproved_(request, actor, now, approval) {
   if (!existing) {
     var values = {
       "Nomor Request": masterId,
-      [procurementFirstHeader_(masterContext.headers, ["Nama Requestor", "Nama"]) || "Nama Requestor"]: request.REQUESTER_NAME,
-      "Alamat Email User": request.REQUESTER_EMAIL,
-      "Group/Div": request.REQUESTER_DIVISION || "",
-      "Lvl Jabatan": request.REQUESTER_POSITION || "",
-      "Lokasi": request.REQUESTER_LOCATION || "",
+      // PIC procurement dikunci ke admin yang melakukan approval/promotion pertama.
+      [procurementFirstHeader_(headers, ["Nama Requestor", "Nama"]) || "Nama Requestor"]: actor.name,
+      "Alamat Email User": actor.email,
+      "Group/Div": actor.division || "",
+      "Lvl Jabatan": actor.position || "",
+      "Lokasi": actor.location || "",
       "Tanggal Request": requestDate,
       "Bentuk": request.REQUEST_TYPE,
       "Jenis Permintaan": request.REQUEST_TYPE,
       "Item": request.REQUEST_TYPE,
       "Deskripsi": request.REQUESTER_NOTES || "",
       "Status": "Ongoing",
-      "Keterangan Status": "Disetujui melalui Portal Procurement"
+      "Keterangan Status": "Disetujui melalui Portal Procurement oleh " + actor.name
     };
     sheet.appendRow(headers.map(function (header) { return values[header] === undefined ? "" : values[header]; }));
     procurementFormatMasterRequestDate_(sheet, sheet.getLastRow(), headers, requestDate);
     procurementWriteSlaFormulas_(sheet, sheet.getLastRow(), headers);
     SpreadsheetApp.flush();
   } else {
+    // Rekonsiliasi baris lama yang belum pernah terhubung ke portal memakai approver pertama sebagai PIC.
+    procurementWritePatches_(sheet, existing.__rowNumber, headers, {
+      [procurementFirstHeader_(headers, ["Nama Requestor", "Nama"]) || "Nama Requestor"]: actor.name,
+      "Alamat Email User": actor.email,
+      "Group/Div": actor.division || "",
+      "Lvl Jabatan": actor.position || "",
+      "Lokasi": actor.location || ""
+    });
     var requestColumn = headers.indexOf("Nomor Request");
     if (requestColumn >= 0 && String(existing["Nomor Request"] || "").trim() !== masterId) {
       sheet.getRange(existing.__rowNumber, requestColumn + 1).setValue(masterId);
@@ -992,6 +1084,10 @@ function procurementActor_(body) {
   var user = portalFind_(PORTAL_SHEETS_.users, "EMAIL", actor.email, true);
   if (!user || !portalTrue_(user.ACTIVE) || String(user.ROLE).toUpperCase() !== "PROCUREMENT_ADMIN") throw new Error("FORBIDDEN: Akun tidak terdaftar sebagai Procurement Admin.");
   actor.role = "PROCUREMENT_ADMIN";
+  actor.name = String(user.DISPLAY_NAME || actor.name || actor.email);
+  actor.division = String(user.DIVISION || "");
+  actor.position = String(user.POSITION || "");
+  actor.location = String(user.LOCATION || "");
   // Cache singkat menghindari tokeninfo Google di setiap klik tanpa menunda revokasi terlalu lama.
   cache.put("proc-admin-" + digest, JSON.stringify(actor), 300);
   return actor;

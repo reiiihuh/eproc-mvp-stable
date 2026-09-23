@@ -1,4 +1,4 @@
-import type { ProcurementSession, PortalReviewDetail, PortalReviewRequest } from "./portal-review-types"
+import type { ProcurementAdminAccount, ProcurementSession, PortalReviewDetail, PortalReviewRequest } from "./portal-review-types"
 import type { ProcurementDataset, ProcurementPic, ProcurementRecord, ProcurementVendor } from "./procurement-types"
 
 export type ProcurementWorkspaceSnapshot = { title: string; sheets: Record<string, unknown[][]>; dataset?: ProcurementDataset }
@@ -29,6 +29,9 @@ export interface PortalReviewRepository {
   deleteProcurementPics(pics: ProcurementPic[]): Promise<void>
   upsertProcurementVendor(vendor: ProcurementVendor): Promise<{ id: string; sourceRow: number }>
   deleteProcurementVendors(vendors: ProcurementVendor[]): Promise<void>
+  listProcurementAdmins(): Promise<ProcurementAdminAccount[]>
+  upsertProcurementAdmin(admin: { email: string; name: string; active: boolean }): Promise<ProcurementAdminAccount[]>
+  setProcurementAdminActive(email: string, active: boolean): Promise<ProcurementAdminAccount[]>
 }
 
 type ApiEnvelope<T> = { ok: boolean; data?: T; error?: string; message?: string }
@@ -148,6 +151,9 @@ export class AppsScriptPortalReviewRepository implements PortalReviewRepository 
   async deleteProcurementVendors(vendors: ProcurementVendor[]) {
     await this.write<Record<string, unknown>>("procurement.deleteVendors", { vendors: vendors.map((vendor) => ({ name: vendor.name, sourceRow: vendor.sourceRow })) })
   }
+  listProcurementAdmins() { return this.call<ProcurementAdminAccount[]>("listProcurementAdmins") }
+  upsertProcurementAdmin(admin: { email: string; name: string; active: boolean }) { return this.write<ProcurementAdminAccount[]>("procurement.upsertAdmin", { admin }) }
+  setProcurementAdminActive(email: string, active: boolean) { return this.write<ProcurementAdminAccount[]>("procurement.setAdminActive", { email, active }) }
   async syncProcurementStatus(masterRequestId: string, status: string, poNumber: string, poUrl: string) {
     const pending = this.pendingStatuses()
     pending[masterRequestId] = { masterRequestId, status, poNumber, poUrl }
